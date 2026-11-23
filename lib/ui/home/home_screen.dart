@@ -267,6 +267,8 @@ class HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
+        // The root of the app: nothing to go back to.
+        automaticallyImplyLeading: false,
         title: Text(_titles[_tab]),
         actions: _actions(),
       ),
