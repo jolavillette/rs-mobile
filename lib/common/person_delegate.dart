@@ -10,6 +10,7 @@ import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:retroshare/common/rs_tokens.dart';
 
 class PersonDelegateData {
   const PersonDelegateData({
@@ -506,14 +507,7 @@ class PersonDelegateState extends State<PersonDelegate>
                         height: delegateHeight * 0.92,
                         width: delegateHeight * 0.92,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF00FFFF),
-                              Color(0xFF29ABE2),
-                            ],
-                          ),
+                          gradient: context.rs.actionGradient,
                           borderRadius: BorderRadius.circular(
                             delegateHeight * 0.92 * 0.33,
                           ),
@@ -684,7 +678,7 @@ class PersonDelegateState extends State<PersonDelegate>
                       ),
                       decoration: BoxDecoration(
                         color: Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF8EDFFF)
+                            ? context.rs.selectSoft
                             : Theme.of(context).colorScheme.primary,
                         borderRadius:
                             const BorderRadius.all(Radius.circular(10)),

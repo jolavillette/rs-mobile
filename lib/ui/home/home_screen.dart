@@ -13,6 +13,7 @@ import 'package:retroshare/routes.dart';
 import 'package:retroshare/ui/home/chats_tab.dart';
 import 'package:retroshare/ui/home/friends_tab.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Chat, Location;
+import 'package:retroshare/common/rs_tokens.dart';
 
 const double _desktopBreakpoint = 840;
 const double _desktopSidebarWidth = 380;
@@ -168,14 +169,11 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     const appBarHeight = 56;
     const verticalPadding = 8;
     final totalHeight = statusBarHeight + appBarHeight + verticalPadding * 2;
-    final activeBlue = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF29ABE2),
-      brightness: Brightness.dark,
-    ).primary;
+    final activeBlue = context.rs.brand;
     final isLight = Theme.of(context).brightness == Brightness.light;
-    final appBarIconColor = isLight ? const Color(0xFF29ABE2) : activeBlue;
+    final appBarIconColor = activeBlue;
     final appBarTextColor = isLight
-        ? const Color(0xFF29ABE2)
+        ? activeBlue
         : Theme.of(context).colorScheme.onSurface;
 
     return PreferredSize(
@@ -185,15 +183,8 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           Container(
             height: totalHeight,
             width: MediaQuery.of(context).size.width,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: <Color>[
-                  Color(0xFF00FFFF),
-                  Color(0xFF29ABE2),
-                ],
-                begin: Alignment(-1, -4),
-                end: Alignment(1, 4),
-              ),
+            decoration: BoxDecoration(
+              gradient: context.rs.chromeGradient,
             ),
           ),
           Positioned(
@@ -273,10 +264,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildHomeScaffold({required bool desktop}) {
-    final activeBlue = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF29ABE2),
-      brightness: Brightness.dark,
-    ).primary;
+    final activeBlue = context.rs.brand;
 
     return Scaffold(
       onDrawerChanged: (val) async {
@@ -487,7 +475,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Icon(
                 Icons.forum_outlined,
                 size: 72,
-                color: const Color(0xFF29ABE2),
+                color: context.rs.brand,
               ),
               const SizedBox(height: 20),
               Text(

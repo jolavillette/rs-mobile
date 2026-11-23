@@ -9,6 +9,7 @@ import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/identity.dart';
+import 'package:retroshare/common/rs_tokens.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -440,14 +441,7 @@ class SignUpScreenState extends State<SignUpScreen> {
       onPressed: createAccount,
       child: Ink(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: <Color>[
-              Color(0xFF00FFFF),
-              Color(0xFF29ABE2),
-            ],
-            begin: Alignment(-1, -4),
-            end: Alignment(1, 4),
-          ),
+          gradient: context.rs.actionGradient,
           borderRadius: BorderRadius.circular(15),
         ),
         child: Container(
