@@ -202,7 +202,7 @@ Widget drawerWidget(
                     navigate('/settings');
                   }),
                   buildNavList(Icons.info_rounded, 'About', () {
-                    navigate('/about');
+                    navigate('/web_help');
                   }),
                 ],
               ),
