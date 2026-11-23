@@ -106,9 +106,11 @@
                 android:value="Persistent user-enabled peer-to-peer communication node" />
         </service>
 
+        <!-- Start, stop and restart the core from inside the app only: exported,
+             these receivers would let any installed app start, stop or restart it. -->
         <receiver
             android:name=".ServiceStart"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="cc.retroshare.retroshare.start" />
             </intent-filter>
@@ -116,7 +118,7 @@
 
         <receiver
             android:name=".ServiceStop"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="cc.retroshare.retroshare.stop" />
             </intent-filter>
@@ -124,7 +126,7 @@
 
         <receiver
             android:name=".ServiceRestart"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="cc.retroshare.retroshare.restart" />
             </intent-filter>
