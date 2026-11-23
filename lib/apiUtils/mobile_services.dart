@@ -3,7 +3,7 @@ import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// A core service as Mobile Services shows it.
+/// A core service as the Services page shows it.
 class MobileService {
   const MobileService(this.type, this.name, this.role);
 
@@ -90,7 +90,7 @@ const neededServices = <MobileService>[
 
 /// The services the app has no page for: on a phone they cost CPU, mobile
 /// data, battery or storage for nothing the user can see. The app turns them
-/// off at every login, except those the user turned on in Mobile Services.
+/// off at every login, except those the user turned on in Services.
 const optionalServices = <MobileService>[
   MobileService(
     RsServiceTypes.forums,

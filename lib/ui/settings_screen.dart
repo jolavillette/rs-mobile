@@ -393,7 +393,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                             context: context,
                             icon: Icons.widgets_rounded,
                             iconBgColor: Colors.indigo,
-                            title: 'Mobile Services',
+                            title: 'Services',
                             subtitle: 'Every service the core runs',
                             onTap: () {
                               Navigator.pushNamed(
@@ -407,7 +407,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                             context: context,
                             icon: Icons.security_rounded,
                             iconBgColor: Colors.green,
-                            title: 'Privacy & Security',
+                            title: 'Identities',
                             subtitle: 'Manage and switch identities',
                             onTap: () {
                               Navigator.pushNamed(context, '/change_identity');

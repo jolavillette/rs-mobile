@@ -129,7 +129,7 @@ class _MobileServicesSettingsScreenState
       ..sort());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mobile Services')),
+      appBar: AppBar(title: const Text('Services')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
