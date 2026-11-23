@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:retroshare/common/bottom_bar.dart';
 import 'package:retroshare/common/drawer.dart';
 import 'package:retroshare/common/person_delegate.dart';
+import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/common/shimmer.dart';
 import 'package:retroshare/common/styles.dart';
 import 'package:retroshare/provider/identity.dart';
@@ -56,6 +57,25 @@ class ChangeIdentityScreenState extends State<ChangeIdentityScreen> {
                                     .ownIdentity[index];
                             Provider.of<Identities>(context, listen: false)
                                 .updateSelectedIdentity(id);
+                          },
+                          // Identities are deleted from this list, and never
+                          // the active one: the user switches first.
+                          onLongPress: (Offset tapPosition) {
+                            final ids =
+                                Provider.of<Identities>(context, listen: false);
+                            final id = ids.ownIdentity[index];
+                            if (id.mId == ids.currentIdentity?.mId) return;
+                            showCustomMenu(
+                              'Delete identity',
+                              const Icon(Icons.delete, color: Colors.black),
+                              () => showdeleteDialog(
+                                context,
+                                id,
+                                onDeleted: () => setState(() {}),
+                              ),
+                              tapPosition,
+                              context,
+                            );
                           },
                         );
                       },

@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
@@ -63,22 +62,20 @@ class Identities with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Deletes [identity], one of ours. When it was the current identity,
-  /// another remaining one becomes current.
+  /// Deletes [identity], one of ours but never the active one: the user
+  /// switches to another identity first.
   Future<void> deleteIdentity(Identity identity) async {
     if (_authToken == null) {
       return;
+    }
+    if (_currentIdentity?.mId == identity.mId) {
+      throw Exception('The active identity cannot be deleted');
     }
 
     try {
       final success = await RsIdentity.deleteIdentity(identity, _authToken!);
       if (!success) throw HttpException('BAD REQUEST');
       _ownidentities.removeWhere((element) => element.mId == identity.mId);
-      if (_currentIdentity?.mId == identity.mId) {
-        _currentIdentity = _ownidentities.isEmpty
-            ? null
-            : _ownidentities[Random().nextInt(_ownidentities.length)];
-      }
       if (_selected?.mId == identity.mId) {
         _selected = _currentIdentity;
       }

@@ -22,6 +22,13 @@ class UpdateIdentityScreen extends StatefulWidget {
 }
 
 class UpdateIdentityScreenState extends State<UpdateIdentityScreen> {
+  bool get _isNotActive {
+    final edited = widget.curr;
+    return edited is Identity &&
+        edited.mId !=
+            Provider.of<Identities>(context, listen: false).currentIdentity?.mId;
+  }
+
   TextEditingController nameController = TextEditingController();
   RsGxsImage _image = const RsGxsImage(base64String: '');
   bool _showError = false;
@@ -137,10 +144,13 @@ class UpdateIdentityScreenState extends State<UpdateIdentityScreen> {
                     ),
                   ),
                   const Spacer(),
+                  // The active identity is never deleted: the user switches
+                  // to another one first.
+                  if (_isNotActive)
                   PopupMenuButton(
                     onSelected: (val) {
-                      // Delete the identity this screen edits, which is not
-                      // necessarily the current one; then leave the screen.
+                      // Delete the identity this screen edits; then leave the
+                      // screen.
                       final identity = widget.curr;
                       if (identity is Identity) {
                         showdeleteDialog(
