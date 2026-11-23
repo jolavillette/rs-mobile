@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:retroshare/apiUtils/mobile_services.dart';
 import 'package:retroshare/apiUtils/retroshare_service.dart' as mobile_service;
-import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
 String deriveApiToken(String locationId, String password) {
@@ -87,7 +87,7 @@ class AccountCredentials with ChangeNotifier {
       }
 
       if (await RsJsonApi.isAuthTokenValid(token)) {
-        await _disableGxsMails(token);
+        await turnOffOptionalServices(token, account.locationId);
         return true;
       }
 
@@ -98,7 +98,7 @@ class AccountCredentials with ChangeNotifier {
           token,
         );
         if (await RsJsonApi.isAuthTokenValid(token)) {
-          await _disableGxsMails(token);
+          await turnOffOptionalServices(token, account.locationId);
           return true;
         }
       } catch (error) {
@@ -107,23 +107,6 @@ class AccountCredentials with ChangeNotifier {
     }
 
     return false;
-  }
-
-  Future<void> _disableGxsMails(AuthToken token) async {
-    try {
-      final success = await RsServiceControl.setServiceEnabled(
-        rsFullServiceId(RsServiceTypes.gxsMails),
-        false,
-        token,
-      );
-      if (!success) {
-        debugPrint('RetroShare Core did not disable the GXS Mails service.');
-      }
-    } catch (error) {
-      // Mail is not used by the mobile client. Do not block login if an older
-      // core does not expose service-permission controls.
-      debugPrint('Unable to disable the GXS Mails service: $error');
-    }
   }
 
   Future<bool> checkIsValidAuthToken() async {
@@ -277,10 +260,12 @@ class AccountCredentials with ChangeNotifier {
 
       _pgpPassword = password;
       _authToken = AuthToken(apiUser, apiPass);
-      await _disableGxsMails(_authToken!);
+      final locationId = createResp['locationId']?.toString();
+      if (locationId != null) {
+        await turnOffOptionalServices(_authToken!, locationId);
+      }
       await fetchAuthAccountList();
 
-      final locationId = createResp['locationId']?.toString();
       Account? importedAccount;
       for (final account in _accountsList) {
         if ((locationId != null && account.locationId == locationId) ||
