@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/identity_avatar.dart';
 import 'package:retroshare/common/rs_tokens.dart';
-import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/provider/subscribed.dart';
+import 'package:retroshare/ui/identities/own_identities_list.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Chat, Identity;
 
 /// People, as in the web UI: identities, filtered to my contacts, my own
@@ -124,17 +124,6 @@ class _PeopleTabState extends State<PeopleTab> {
     );
   }
 
-  void _useIdentity(Identity identity) {
-    Provider.of<Identities>(context, listen: false)
-      ..updateSelectedIdentity(identity)
-      ..updateCurrentIdentity();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${identity.name ?? 'This identity'} is now active.'),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final roomChat = context.watch<RoomChatLobby>();
@@ -242,7 +231,7 @@ class _PeopleTabState extends State<PeopleTab> {
           child: _view == _View.chats
               ? _chatsList(context, roomChat)
               : _filter == _Filter.own
-                  ? _ownList(context)
+                  ? OwnIdentitiesList(open: widget.open, search: _search)
                   : _identityList(context, roomChat),
         ),
       ],
@@ -252,92 +241,6 @@ class _PeopleTabState extends State<PeopleTab> {
   Widget _empty(String text) => Center(
         child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
       );
-
-  /// My identities: the active one marked; the others can be made active or
-  /// deleted. The active identity is never deleted.
-  Widget _ownList(BuildContext context) {
-    final rs = context.rs;
-    final text = Theme.of(context).textTheme;
-    final ids = context.watch<Identities>();
-    final current = ids.currentIdentity?.mId;
-    final own = ids.ownIdentity.where((i) => _matches(i.name)).toList()
-      ..sort(_byName);
-    // The list always ends with a row to create an identity, so creating one
-    // does not depend on finding the + button.
-    return RefreshIndicator(
-      onRefresh: ids.fetchOwnidenities,
-      child: ListView.builder(
-        itemCount: own.length + 1,
-        itemBuilder: (context, i) {
-          if (i == own.length) {
-            return ListTile(
-              leading: const Icon(Icons.add_circle_outline),
-              title: const Text('Create a new identity'),
-              onTap: () => widget.open('/create_identity'),
-            );
-          }
-          final identity = own[i];
-          final active = identity.mId == current;
-          return ListTile(
-            leading: IdentityAvatar(identity: identity),
-            title: Text(identity.name ?? identity.mId),
-            subtitle: Text(
-              '${active ? 'Active identity' : 'My Identity'}'
-              ' · ${identity.signed ? 'signed' : 'pseudonymous'}',
-            ),
-            selected: active,
-            onTap: () => widget.open('/profile', arguments: {'id': identity}),
-            trailing: PopupMenuButton<String>(
-              tooltip: 'Actions',
-              onSelected: (action) {
-                switch (action) {
-                  case 'use':
-                    _useIdentity(identity);
-                  case 'edit':
-                    widget.open(
-                      '/updateIdentity',
-                      arguments: {'id': identity},
-                    );
-                  case 'delete':
-                    showdeleteDialog(context, identity);
-                }
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'use',
-                  enabled: !active,
-                  child: Text(active ? 'Active identity' : 'Use this identity'),
-                ),
-                const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                PopupMenuItem(
-                  value: 'delete',
-                  enabled: !active,
-                  child: Text(
-                    active
-                        ? 'Delete (make another identity active first)'
-                        : 'Delete',
-                    style: active ? null : TextStyle(color: rs.down),
-                  ),
-                ),
-              ],
-              child: active
-                  ? Padding(
-                      padding: const EdgeInsets.all(RsScale.s2),
-                      child: Icon(Icons.check_circle, color: rs.brand),
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.all(RsScale.s2),
-                      child: Icon(Icons.more_vert, color: rs.inkDim),
-                    ),
-            ),
-            titleTextStyle: active
-                ? text.titleSmall?.copyWith(color: rs.brand)
-                : null,
-          );
-        },
-      ),
-    );
-  }
 
   /// Contacts, or every identity known: tap for the profile, the menu to
   /// chat or to add or remove the contact.
