@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/apiUtils/mobile_services.dart';
+import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
+/// Every service the core runs, in three groups: those the app needs (shown,
+/// not switchable), those the app has no page for (off; the app turns them
+/// off at every login, turning one on here asks for confirmation and is
+/// remembered for this node), and any other service the core reports.
 class MobileServicesSettingsScreen extends StatefulWidget {
   const MobileServicesSettingsScreen({super.key});
 
@@ -13,14 +19,14 @@ class MobileServicesSettingsScreen extends StatefulWidget {
 
 class _MobileServicesSettingsScreenState
     extends State<MobileServicesSettingsScreen> {
-  static const int _forumsServiceId = 0x0215;
-  static const int _boardsServiceId = 0x0216;
-  static const int _channelsServiceId = 0x0217;
-  static const int _mailsServiceId = 0x0230;
-
   bool _isLoading = true;
-  final Map<int, bool> _servicesEnabled = {};
-  final Set<int> _servicesUpdating = {};
+
+  /// The services the core runs: 16-bit type -> the core's name.
+  Map<int, String> _coreServices = {};
+
+  /// On or off, by service type.
+  final Map<int, bool> _on = {};
+  final Set<int> _updating = {};
 
   @override
   void initState() {
@@ -33,25 +39,20 @@ class _MobileServicesSettingsScreenState
       final authToken =
           Provider.of<AccountCredentials>(context, listen: false).authtoken;
       if (authToken == null) return;
-      await RsServiceControl.setServiceEnabled(
-        _mailsServiceId,
-        false,
-        authToken,
-      );
-      for (final serviceId in const [
-        _forumsServiceId,
-        _channelsServiceId,
-        _boardsServiceId,
-      ]) {
-        final permissions =
-            await RsServiceControl.getServicePermissions(serviceId, authToken);
-        _servicesEnabled[serviceId] = permissions['mDefaultAllowed'] == true;
+      final services = await coreServices(authToken);
+      for (final type in services.keys) {
+        final permissions = await RsServiceControl.getServicePermissions(
+          rsFullServiceId(type),
+          authToken,
+        );
+        _on[type] = isServiceOn(permissions);
       }
+      _coreServices = services;
     } catch (error) {
-      debugPrint('Failed to load service permissions: $error');
+      debugPrint('Failed to load the services: $error');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not load mobile services.')),
+          const SnackBar(content: Text('Could not load the services.')),
         );
       }
     } finally {
@@ -59,19 +60,47 @@ class _MobileServicesSettingsScreenState
     }
   }
 
-  Future<void> _setServiceEnabled(int serviceId, bool enabled) async {
-    setState(() => _servicesUpdating.add(serviceId));
+  Future<bool> _confirmTurnOn(MobileService service) async {
+    final turnOn = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded),
+        title: Text('Turn on ${service.name}?'),
+        content: Text(
+          '${service.role}\n\n'
+          'RetroShare Mobile cannot show it yet. Turned on, it makes this '
+          'phone use more CPU, mobile data, battery and storage.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Turn on'),
+          ),
+        ],
+      ),
+    );
+    return turnOn == true;
+  }
+
+  Future<void> _setServiceOn(MobileService service, bool on) async {
+    final auth = Provider.of<AccountCredentials>(context, listen: false);
+    final authToken = auth.authtoken;
+    final locationId = auth.loggedinAccount?.locationId;
+    if (authToken == null || locationId == null) return;
+    if (on && !await _confirmTurnOn(service)) return;
+    if (!mounted) return;
+
+    setState(() => _updating.add(service.type));
     try {
-      final authToken =
-          Provider.of<AccountCredentials>(context, listen: false).authtoken;
-      if (authToken == null) return;
-      final success = await RsServiceControl.setServiceEnabled(
-        serviceId,
-        enabled,
-        authToken,
-      );
-      if (!success) throw Exception('updateServicePermissions returned false');
-      if (mounted) setState(() => _servicesEnabled[serviceId] = enabled);
+      final done =
+          await RsServiceControl.setServiceEnabled(service.fullId, on, authToken);
+      if (!done) throw Exception('updateServicePermissions returned false');
+      await setOptedIn(locationId, service.type, on);
+      if (mounted) setState(() => _on[service.type] = on);
     } catch (error) {
       debugPrint('Failed to update service permission: $error');
       if (mounted) {
@@ -80,25 +109,78 @@ class _MobileServicesSettingsScreenState
         );
       }
     } finally {
-      if (mounted) setState(() => _servicesUpdating.remove(serviceId));
+      if (mounted) setState(() => _updating.remove(service.type));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final needed =
+        neededServices.where((s) => _coreServices.containsKey(s.type));
+    final optional =
+        optionalServices.where((s) => _coreServices.containsKey(s.type));
+    final listed = {
+      ...neededServices.map((s) => s.type),
+      ...optionalServices.map((s) => s.type),
+    };
+    final others = (_coreServices.keys.where((t) => !listed.contains(t))
+        .toList()
+      ..sort());
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Mobile Services')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'Choose which services this mobile node synchronizes with friends.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+      appBar: AppBar(title: const Text('Services')),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  'Every service the RetroShare core runs on this phone. The '
+                  'services the app has no page for are off: they would use '
+                  'CPU, mobile data, battery and storage for nothing you can '
+                  'see. The app turns them off at every start, except the '
+                  'ones you turn on here.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                _section(
+                  'Needed by the app',
+                  [for (final s in needed) _statusTile(s.name, s.role, s.type)],
+                ),
+                _section(
+                  'No page in the app',
+                  [for (final s in optional) _serviceSwitch(s)],
+                ),
+                if (others.isNotEmpty)
+                  _section('Other services', [
+                    for (final type in others)
+                      _statusTile(
+                        _coreServices[type]!.isEmpty
+                            ? 'Service 0x${type.toRadixString(16).padLeft(4, '0')}'
+                            : _coreServices[type]!,
+                        'Not handled by the app.',
+                        type,
+                      ),
+                  ]),
+              ],
             ),
+    );
+  }
+
+  Widget _section(String title, List<Widget> tiles) {
+    final theme = Theme.of(context);
+    if (tiles.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(title, style: theme.textTheme.titleSmall),
           ),
-          const SizedBox(height: 16),
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -109,19 +191,10 @@ class _MobileServicesSettingsScreenState
             ),
             child: Column(
               children: [
-                _serviceSwitch('Forums', _forumsServiceId),
-                const Divider(height: 1, indent: 64),
-                _serviceSwitch('Channels', _channelsServiceId),
-                const Divider(height: 1, indent: 64),
-                _serviceSwitch('Boards', _boardsServiceId),
-                const Divider(height: 1, indent: 64),
-                const SwitchListTile(
-                  secondary: Icon(Icons.mail_outline_rounded),
-                  title: Text('Mail'),
-                  subtitle: Text('Not used by RetroShare Mobile'),
-                  value: false,
-                  onChanged: null,
-                ),
+                for (var i = 0; i < tiles.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, indent: 64),
+                  tiles[i],
+                ],
               ],
             ),
           ),
@@ -130,8 +203,25 @@ class _MobileServicesSettingsScreenState
     );
   }
 
-  Widget _serviceSwitch(String title, int serviceId) {
-    final updating = _servicesUpdating.contains(serviceId);
+  /// A service shown with its state, without a switch.
+  Widget _statusTile(String name, String role, int type) {
+    final theme = Theme.of(context);
+    final on = _on[type] ?? false;
+    return ListTile(
+      leading: const Icon(Icons.lock_outline_rounded),
+      title: Text(name),
+      subtitle: Text(role),
+      trailing: Text(
+        on ? 'On' : 'Off',
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: on ? theme.colorScheme.primary : theme.colorScheme.error,
+        ),
+      ),
+    );
+  }
+
+  Widget _serviceSwitch(MobileService service) {
+    final updating = _updating.contains(service.type);
     return SwitchListTile(
       secondary: updating
           ? const SizedBox(
@@ -140,12 +230,10 @@ class _MobileServicesSettingsScreenState
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.sync_alt_rounded),
-      title: Text(title),
-      subtitle: const Text('Synchronize with friends'),
-      value: _servicesEnabled[serviceId] ?? false,
-      onChanged: _isLoading || updating
-          ? null
-          : (enabled) => _setServiceEnabled(serviceId, enabled),
+      title: Text(service.name),
+      subtitle: Text(service.role),
+      value: _on[service.type] ?? false,
+      onChanged: updating ? null : (on) => _setServiceOn(service, on),
     );
   }
 }
