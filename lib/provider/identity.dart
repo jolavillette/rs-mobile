@@ -2,6 +2,12 @@ import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'dart:async' show unawaited;
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// The active identity, kept across restarts. Own identity ids are unique to
+/// a node, so a value saved by another node matches none of ours.
+const _activeIdentityKey = 'active_identity_id';
 
 class Identities with ChangeNotifier {
   List<Identity> _ownidentities = [];
@@ -32,8 +38,13 @@ class Identities with ChangeNotifier {
     Identity? stillOwn(Identity? id) => id == null
         ? null
         : _ownidentities.where((e) => e.mId == id.mId).firstOrNull;
+    final savedId =
+        (await SharedPreferences.getInstance()).getString(_activeIdentityKey);
+    final saved =
+        _ownidentities.where((e) => e.mId == savedId).firstOrNull;
     if (_ownidentities.isNotEmpty) {
-      _currentIdentity = stillOwn(_currentIdentity) ?? _ownidentities[0];
+      _currentIdentity =
+          stillOwn(_currentIdentity) ?? saved ?? _ownidentities[0];
       _selected = stillOwn(_selected) ?? _currentIdentity;
     }
     notifyListeners();
@@ -44,8 +55,18 @@ class Identities with ChangeNotifier {
   void updateCurrentIdentity() {
     if (_selected != null) {
       _currentIdentity = _selected;
+      _saveActiveIdentity();
     }
     notifyListeners();
+  }
+
+  void _saveActiveIdentity() {
+    final id = _currentIdentity?.mId;
+    if (id == null) return;
+    unawaited(
+      SharedPreferences.getInstance()
+          .then((prefs) => prefs.setString(_activeIdentityKey, id)),
+    );
   }
 
   void updateSelectedIdentity(Identity id) {
@@ -66,6 +87,7 @@ class Identities with ChangeNotifier {
     _ownidentities.add(newIdentity);
     _currentIdentity = newIdentity;
     _selected = _currentIdentity;
+    _saveActiveIdentity();
     notifyListeners();
   }
 
