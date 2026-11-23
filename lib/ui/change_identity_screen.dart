@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/bottom_bar.dart';
 import 'package:retroshare/common/drawer.dart';
@@ -16,12 +15,15 @@ class ChangeIdentityScreen extends StatefulWidget {
 }
 
 class ChangeIdentityScreenState extends State<ChangeIdentityScreen> {
+  // Fetched once: a future created in build() fetched the list again at every
+  // rebuild.
+  late final Future<void> _fetchOwnIdentities;
+
   @override
   void initState() {
     super.initState();
-    SchedulerBinding.instance.addPostFrameCallback((_) async {
-      await Provider.of<Identities>(context, listen: false).fetchOwnidenities();
-    });
+    _fetchOwnIdentities =
+        Provider.of<Identities>(context, listen: false).fetchOwnidenities();
   }
 
   @override
@@ -33,8 +35,7 @@ class ChangeIdentityScreenState extends State<ChangeIdentityScreen> {
         child: Padding(
           padding: const EdgeInsets.all(8),
           child: FutureBuilder(
-            future: Provider.of<Identities>(context, listen: false)
-                .fetchOwnidenities(),
+            future: _fetchOwnIdentities,
             builder: (context, snapshot) {
               return snapshot.connectionState == ConnectionState.done
                   ? ListView.builder(

@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
@@ -26,9 +27,15 @@ class Identities with ChangeNotifier {
       return;
     }
     _ownidentities = await getOwnIdentities(_authToken!);
+    // Keep the current and the selected identity while they are still ours:
+    // this runs again while the Change Identity screen is open, and moving
+    // both back to the first identity undid the user's choice.
+    Identity? stillOwn(Identity? id) => id == null
+        ? null
+        : _ownidentities.firstWhereOrNull((e) => e.mId == id.mId);
     if (_ownidentities.isNotEmpty) {
-      _currentIdentity = _ownidentities[0];
-      _selected = _ownidentities[0];
+      _currentIdentity = stillOwn(_currentIdentity) ?? _ownidentities[0];
+      _selected = stillOwn(_selected) ?? _currentIdentity;
     }
     notifyListeners();
   }
