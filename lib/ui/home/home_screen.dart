@@ -173,8 +173,8 @@ class HomeScreenState extends State<HomeScreen> {
   static const _titles = ['Home', 'Network', 'People', 'Chat', 'More'];
 
   /// A navigation icon with the count of what is unread behind it, as the
-  /// web UI badges its menu: rooms and invitations on Chat, direct chats on
-  /// Network, distant chats on People.
+  /// web UI badges its menu: open chats, rooms and invitations on Chat,
+  /// direct chats on Network too.
   Widget _badged(IconData icon, int Function(ChatLobby, RoomChatLobby) count) {
     return Consumer2<ChatLobby, RoomChatLobby>(
       builder: (context, chatLobby, roomChatLobby, _) {
@@ -188,15 +188,14 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  static int _roomsUnread(ChatLobby chatLobby, RoomChatLobby _) =>
+  static int _chatUnread(ChatLobby chatLobby, RoomChatLobby roomChatLobby) =>
       chatLobby.subscribedlist.fold(0, (sum, chat) => sum + chat.unreadCount) +
-      chatLobby.pendingInviteCount;
+      chatLobby.pendingInviteCount +
+      roomChatLobby.distantUnreadCount +
+      roomChatLobby.peerUnreadCount;
 
   static int _peerUnread(ChatLobby _, RoomChatLobby roomChatLobby) =>
       roomChatLobby.peerUnreadCount;
-
-  static int _distantUnread(ChatLobby _, RoomChatLobby roomChatLobby) =>
-      roomChatLobby.distantUnreadCount;
 
   Widget _buildHomeScaffold({required bool desktop}) {
     _desktop = desktop;
@@ -224,6 +223,7 @@ class HomeScreenState extends State<HomeScreen> {
               ChatsTab(
                 open: _open,
                 onOpenRoom: desktop ? _openRoom : null,
+                onOpenPeerChat: desktop ? _openPeerChat : null,
               ),
               MoreTab(open: _open),
             ],
@@ -253,14 +253,14 @@ class HomeScreenState extends State<HomeScreen> {
             selectedIcon: _badged(Icons.share, _peerUnread),
             label: 'Network',
           ),
-          NavigationDestination(
-            icon: _badged(Icons.people_outline, _distantUnread),
-            selectedIcon: _badged(Icons.people, _distantUnread),
+          const NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
             label: 'People',
           ),
           NavigationDestination(
-            icon: _badged(Icons.forum_outlined, _roomsUnread),
-            selectedIcon: _badged(Icons.forum, _roomsUnread),
+            icon: _badged(Icons.forum_outlined, _chatUnread),
+            selectedIcon: _badged(Icons.forum, _chatUnread),
             label: 'Chat',
           ),
           const NavigationDestination(
