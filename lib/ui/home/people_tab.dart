@@ -262,12 +262,20 @@ class _PeopleTabState extends State<PeopleTab> {
     final current = ids.currentIdentity?.mId;
     final own = ids.ownIdentity.where((i) => _matches(i.name)).toList()
       ..sort(_byName);
-    if (own.isEmpty) return _empty('No identities found');
+    // The list always ends with a row to create an identity, so creating one
+    // does not depend on finding the + button.
     return RefreshIndicator(
       onRefresh: ids.fetchOwnidenities,
       child: ListView.builder(
-        itemCount: own.length,
+        itemCount: own.length + 1,
         itemBuilder: (context, i) {
+          if (i == own.length) {
+            return ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('Create a new identity'),
+              onTap: () => widget.open('/create_identity'),
+            );
+          }
           final identity = own[i];
           final active = identity.mId == current;
           return ListTile(
