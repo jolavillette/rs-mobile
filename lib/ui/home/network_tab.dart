@@ -78,8 +78,9 @@ class _NetworkTabState extends State<NetworkTab> {
   _View _view = _View.network;
   String _search = '';
 
-  /// Friends whose nodes the user folded away; every friend starts unfolded.
-  final Set<String> _folded = {};
+  /// Friends whose nodes the user unfolded; every friend starts folded, as
+  /// the profiles of the desktop's friend list.
+  final Set<String> _unfolded = {};
 
   List<_Friend> _friends(List<Location> locations) {
     final byGpg = <String, List<Location>>{};
@@ -178,14 +179,14 @@ class _NetworkTabState extends State<NetworkTab> {
       );
 
   /// Friends, each with their nodes (devices) under them, as the desktop's
-  /// friend list: a friend's row folds and unfolds their nodes.
+  /// friend list: folded at first, a tap on a friend unfolds their nodes.
   Widget _networkList(BuildContext context, List<_Friend> friends) {
     if (friends.isEmpty) return _empty(context, 'No friends found');
     final rs = context.rs;
     final text = Theme.of(context).textTheme;
     final rows = <Widget>[];
     for (final f in friends) {
-      final folded = _folded.contains(f.gpgId);
+      final folded = !_unfolded.contains(f.gpgId);
       final online = f.locations.where((l) => l.isOnline).length;
       final count = f.locations.length;
       final summary = f.pendingValidation
@@ -212,7 +213,7 @@ class _NetworkTabState extends State<NetworkTab> {
               Text(summary, maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: Icon(folded ? Icons.expand_more : Icons.expand_less),
           onTap: () => setState(() {
-            if (!_folded.remove(f.gpgId)) _folded.add(f.gpgId);
+            if (!_unfolded.remove(f.gpgId)) _unfolded.add(f.gpgId);
           }),
         ),
       );
