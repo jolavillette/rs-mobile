@@ -154,7 +154,7 @@ class SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: const Text('Preferences'),
         backgroundColor: theme.colorScheme.surface,
         shadowColor: Colors.transparent,
         leading: BackButton(
@@ -341,11 +341,13 @@ class SettingsScreenState extends State<SettingsScreen> {
                           .withAlpha(50),
                       child: Column(
                         children: [
+                          // The sections of the desktop's Preferences, with
+                          // their names and in their order.
                           _settingsTile(
                             context: context,
                             icon: Icons.person_rounded,
                             iconBgColor: Colors.blue,
-                            title: 'Account',
+                            title: 'Node',
                             subtitle: 'PGP ID, mId, profile details',
                             onTap: () {
                               Navigator.pushNamed(
@@ -353,17 +355,6 @@ class SettingsScreenState extends State<SettingsScreen> {
                                 '/profile',
                                 arguments: {'id': currentId},
                               );
-                            },
-                          ),
-                          _divider(theme),
-                          _settingsTile(
-                            context: context,
-                            icon: Icons.chat_rounded,
-                            iconBgColor: Colors.orange,
-                            title: 'Chat Settings',
-                            subtitle: 'Theme, bubble style',
-                            onTap: () {
-                              Navigator.pushNamed(context, '/chat_settings');
                             },
                           ),
                           _divider(theme),
@@ -380,12 +371,23 @@ class SettingsScreenState extends State<SettingsScreen> {
                           _divider(theme),
                           _settingsTile(
                             context: context,
-                            icon: Icons.query_stats_rounded,
-                            iconBgColor: Colors.purple,
-                            title: 'Statistics',
-                            subtitle: 'Transfer rates and totals',
+                            icon: Icons.chat_rounded,
+                            iconBgColor: Colors.orange,
+                            title: 'Chats',
+                            subtitle: 'Theme, bubble style',
                             onTap: () {
-                              Navigator.pushNamed(context, '/statistics');
+                              Navigator.pushNamed(context, '/chat_settings');
+                            },
+                          ),
+                          _divider(theme),
+                          _settingsTile(
+                            context: context,
+                            icon: Icons.palette_rounded,
+                            iconBgColor: Colors.pink,
+                            title: 'Appearance',
+                            subtitle: 'Device, light or dark theme',
+                            onTap: () {
+                              Navigator.pushNamed(context, '/appearance');
                             },
                           ),
                           _divider(theme),
@@ -393,7 +395,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                             context: context,
                             icon: Icons.widgets_rounded,
                             iconBgColor: Colors.indigo,
-                            title: 'Services',
+                            title: 'Permissions',
                             subtitle: 'Every service the core runs',
                             onTap: () {
                               Navigator.pushNamed(
@@ -405,12 +407,12 @@ class SettingsScreenState extends State<SettingsScreen> {
                           _divider(theme),
                           _settingsTile(
                             context: context,
-                            icon: Icons.security_rounded,
-                            iconBgColor: Colors.green,
-                            title: 'Identities',
-                            subtitle: 'Manage and switch identities',
+                            icon: Icons.info_rounded,
+                            iconBgColor: Colors.grey,
+                            title: 'About',
+                            subtitle: 'RetroShare documentation',
                             onTap: () {
-                              Navigator.pushNamed(context, '/change_identity');
+                              Navigator.pushNamed(context, '/about');
                             },
                           ),
                         ],
