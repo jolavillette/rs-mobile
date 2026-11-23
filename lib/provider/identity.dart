@@ -72,8 +72,8 @@ class Identities with ChangeNotifier {
       final success =
           await RsIdentity.deleteIdentity(_currentIdentity!, _authToken!);
       if (!success) throw HttpException('BAD REQUEST');
-      // ignore: unrelated_type_equality_checks
-      _ownidentities.removeWhere((element) => element.mId == _currentIdentity);
+      final deletedId = _currentIdentity!.mId;
+      _ownidentities.removeWhere((element) => element.mId == deletedId);
       final random = Random();
       final randomNum = random.nextInt(_ownidentities.length);
       _currentIdentity = _ownidentities[randomNum];
