@@ -7,6 +7,7 @@ import 'package:retroshare/common/person_delegate.dart';
 import 'package:retroshare/common/styles.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
+import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/provider/subscribed.dart';
 import 'package:retroshare/ui/room/message_delegate.dart';
@@ -21,6 +22,7 @@ enum _ChatMenuAction {
   bubble,
   compact,
   participants,
+  identity,
   invite,
   leave,
 }
@@ -215,6 +217,75 @@ class RoomScreenState extends State<RoomScreen>
     }
   }
 
+  /// The identity used in this room only, as the desktop's identity chooser
+  /// in a room window.
+  Future<void> _chooseRoomIdentity() async {
+    final lobbyId = widget.chat.chatId;
+    final authToken =
+        Provider.of<AccountCredentials>(context, listen: false).authtoken;
+    final own = Provider.of<Identities>(context, listen: false).ownIdentity;
+    if (lobbyId == null || authToken == null || own.isEmpty) return;
+    String? current;
+    try {
+      final response = await rsApiCall(
+        '/rsChats/getIdentityForChatLobby',
+        authToken: authToken,
+        params: {
+          'lobby_id': {'xstr64': lobbyId},
+        },
+      );
+      current = response['nick']?.toString();
+    } catch (e) {
+      debugPrint('Cannot read the identity of room $lobbyId: $e');
+    }
+    if (!mounted) return;
+    final picked = await showDialog<Identity>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Identity in this room'),
+        children: [
+          for (final id in own)
+            ListTile(
+              leading: Icon(
+                id.mId == current
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+              ),
+              title: Text(id.name ?? id.mId),
+              subtitle: Text(id.signed ? 'Signed' : 'Pseudonymous'),
+              onTap: () => Navigator.of(dialogContext).pop(id),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || picked.mId == current || !mounted) return;
+    var changed = false;
+    try {
+      final response = await rsApiCall(
+        '/rsChats/setIdentityForChatLobby',
+        authToken: authToken,
+        params: {
+          'lobby_id': {'xstr64': lobbyId},
+          'nick': picked.mId,
+        },
+      );
+      changed = response['retval'] == true;
+    } catch (e) {
+      debugPrint('Cannot change the identity of room $lobbyId: $e');
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          changed
+              ? 'You now appear as ${picked.name ?? picked.mId} in this room.'
+              : 'The identity could not be changed: this room may accept '
+                  'signed identities only.',
+        ),
+      ),
+    );
+  }
+
   /// Invites online friends into this room, as the web UI's Invite friends.
   Future<void> _inviteFriends() async {
     final lobbyId = widget.chat.chatId;
@@ -345,6 +416,9 @@ class RoomScreenState extends State<RoomScreen>
         return;
       case _ChatMenuAction.participants:
         _tabController.animateTo(1);
+        return;
+      case _ChatMenuAction.identity:
+        await _chooseRoomIdentity();
         return;
       case _ChatMenuAction.invite:
         await _inviteFriends();
@@ -565,6 +639,14 @@ class RoomScreenState extends State<RoomScreen>
                           child: ListTile(
                             leading: Icon(Icons.people_outline),
                             title: Text('Participants'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        const PopupMenuItem<_ChatMenuAction>(
+                          value: _ChatMenuAction.identity,
+                          child: ListTile(
+                            leading: Icon(Icons.badge_outlined),
+                            title: Text('Identity in this room'),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
