@@ -77,16 +77,51 @@ class _PeopleTabState extends State<PeopleTab> {
     }
   }
 
-  Future<void> _setContact(Identity identity, bool isContact) async {
+  Future<bool> _setContact(Identity identity, bool isContact) async {
     try {
       await Provider.of<RoomChatLobby>(context, listen: false)
           .toggleContacts(identity.mId, isContact);
+      return true;
     } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The contact list could not be changed.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('The contact list could not be changed.'),
+          ),
+        );
+      }
+      return false;
     }
+  }
+
+  /// Picks one of the identities known to the node that is not a contact
+  /// yet, and makes it a contact.
+  Future<void> _addContact() async {
+    final roomChat = Provider.of<RoomChatLobby>(context, listen: false);
+    final own = Provider.of<Identities>(context, listen: false)
+        .ownIdentity
+        .map((i) => i.mId)
+        .toSet();
+    final candidates = <String, Identity>{
+      for (final i in [
+        ...roomChat.friendsSignedIdsList,
+        ...roomChat.notContactIds,
+      ])
+        if (!i.isContact && !own.contains(i.mId)) i.mId: i,
+    }.values.toList()
+      ..sort(_byName);
+    final picked = await showModalBottomSheet<Identity>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _AddContactSheet(candidates: candidates),
+    );
+    if (picked == null || !mounted) return;
+    if (!await _setContact(picked, true) || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${picked.name ?? 'The identity'} is now a contact.'),
+      ),
+    );
   }
 
   void _useIdentity(Identity identity) {
@@ -134,6 +169,15 @@ class _PeopleTabState extends State<PeopleTab> {
                       tooltip: 'Create New Identity',
                       icon: const Icon(Icons.add),
                       onPressed: () => widget.open('/create_identity'),
+                    ),
+                  ],
+                  if (_view == _View.people &&
+                      _filter == _Filter.contacts) ...[
+                    const SizedBox(width: RsScale.s2),
+                    IconButton.filled(
+                      tooltip: 'Add a contact',
+                      icon: const Icon(Icons.person_add_alt),
+                      onPressed: _addContact,
                     ),
                   ],
                 ],
@@ -312,7 +356,11 @@ class _PeopleTabState extends State<PeopleTab> {
       ..sort(_byName);
     if (list.isEmpty) {
       return _empty(
-        _filter == _Filter.contacts ? 'No contacts found' : 'No identities found',
+        _filter == _Filter.contacts
+            ? (_search.isEmpty
+                ? 'No contacts yet: + adds one'
+                : 'No contacts found')
+            : 'No identities found',
       );
     }
     final shown = list.take(_listCap).toList();
@@ -433,6 +481,108 @@ class _PeopleTabState extends State<PeopleTab> {
           },
         );
       },
+    );
+  }
+}
+
+/// The identities that can become contacts, with a search: the web UI picks
+/// them in All Users, this sheet does it from the Contacts list.
+class _AddContactSheet extends StatefulWidget {
+  const _AddContactSheet({required this.candidates});
+
+  final List<Identity> candidates;
+
+  @override
+  State<_AddContactSheet> createState() => _AddContactSheetState();
+}
+
+class _AddContactSheetState extends State<_AddContactSheet> {
+  String _search = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final search = _search.toLowerCase();
+    final list = widget.candidates
+        .where((i) => (i.name ?? i.mId).toLowerCase().contains(search))
+        .toList();
+    final shown = list.take(_listCap).toList();
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.8,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                RsScale.s4,
+                RsScale.s4,
+                RsScale.s4,
+                RsScale.s2,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Add a contact', style: text.titleMedium),
+                  const SizedBox(height: RsScale.s1),
+                  Text(
+                    'Identities your node knows of: from your friends, the '
+                    'chat rooms and the forums.',
+                    style: text.bodySmall,
+                  ),
+                  const SizedBox(height: RsScale.s3),
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Search by name',
+                    ),
+                    onChanged: (value) => setState(() => _search = value),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: shown.isEmpty
+                  ? Center(
+                      child: Text('No identity found', style: text.bodyMedium),
+                    )
+                  : ListView.builder(
+                      itemCount: shown.length +
+                          (list.length > shown.length ? 1 : 0),
+                      itemBuilder: (context, i) {
+                        if (i == shown.length) {
+                          return Padding(
+                            padding: const EdgeInsets.all(RsScale.s4),
+                            child: Text(
+                              '${list.length - shown.length} more identities '
+                              '— search to narrow the list',
+                              textAlign: TextAlign.center,
+                              style: text.bodySmall,
+                            ),
+                          );
+                        }
+                        final identity = shown[i];
+                        return ListTile(
+                          leading: IdentityAvatar(identity: identity),
+                          title: Text(identity.name ?? identity.mId),
+                          subtitle: Text(
+                            identity.signed
+                                ? 'Signed identity'
+                                : 'Pseudonymous identity',
+                          ),
+                          trailing: const Icon(Icons.person_add_alt),
+                          onTap: () => Navigator.of(context).pop(identity),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

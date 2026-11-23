@@ -78,6 +78,9 @@ class _NetworkTabState extends State<NetworkTab> {
   _View _view = _View.network;
   String _search = '';
 
+  /// Friends whose nodes the user folded away; every friend starts unfolded.
+  final Set<String> _folded = {};
+
   List<_Friend> _friends(List<Location> locations) {
     final byGpg = <String, List<Location>>{};
     for (final l in locations) {
@@ -174,19 +177,24 @@ class _NetworkTabState extends State<NetworkTab> {
         child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
       );
 
+  /// Friends, each with their nodes (devices) under them, as the desktop's
+  /// friend list: a friend's row folds and unfolds their nodes.
   Widget _networkList(BuildContext context, List<_Friend> friends) {
     if (friends.isEmpty) return _empty(context, 'No friends found');
-    return ListView.builder(
-      itemCount: friends.length,
-      itemBuilder: (context, i) {
-        final f = friends[i];
-        final rs = context.rs;
-        final subtitle = f.pendingValidation
-            ? 'Pending validation'
-            : f.customState.isNotEmpty
-                ? f.customState
-                : null;
-        return ListTile(
+    final rs = context.rs;
+    final text = Theme.of(context).textTheme;
+    final rows = <Widget>[];
+    for (final f in friends) {
+      final folded = _folded.contains(f.gpgId);
+      final online = f.locations.where((l) => l.isOnline).length;
+      final count = f.locations.length;
+      final summary = f.pendingValidation
+          ? 'Pending validation'
+          : '$count node${count == 1 ? '' : 's'}'
+              '${online > 0 ? ', $online online' : ''}'
+              '${f.customState.isNotEmpty ? ' · ${f.customState}' : ''}';
+      rows.add(
+        ListTile(
           leading: _AvatarWithStatus(
             name: f.name,
             color: f.pendingValidation
@@ -200,23 +208,63 @@ class _NetworkTabState extends State<NetworkTab> {
               fontWeight: f.isOnline ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
-          subtitle: subtitle == null
-              ? null
-              : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: f.isOnline
-              ? IconButton(
-                  tooltip: 'Chat',
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  onPressed: () => _openChat(f.mainLocation),
-                )
-              : null,
-          onTap: () => widget.open(
-            '/friend_location_detail',
-            arguments: {'location': f.mainLocation},
+          subtitle:
+              Text(summary, maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: Icon(folded ? Icons.expand_more : Icons.expand_less),
+          onTap: () => setState(() {
+            if (!_folded.remove(f.gpgId)) _folded.add(f.gpgId);
+          }),
+        ),
+      );
+      if (folded) continue;
+      final nodes = [...f.locations]..sort((a, b) {
+          if (a.isOnline != b.isOnline) return a.isOnline ? -1 : 1;
+          return a.locationName
+              .toLowerCase()
+              .compareTo(b.locationName.toLowerCase());
+        });
+      for (final node in nodes) {
+        rows.add(
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.only(
+              left: RsScale.s6 + RsScale.s5,
+              right: RsScale.s4,
+            ),
+            leading: Icon(
+              Icons.circle,
+              size: 10,
+              color: statusColor(context, node.status, node.isOnline),
+            ),
+            minLeadingWidth: RsScale.s3,
+            title: Text(
+              node.locationName.isEmpty ? 'Unnamed node' : node.locationName,
+              style: text.bodyMedium?.copyWith(
+                color: node.isOnline ? rs.ink : rs.inkDim,
+              ),
+            ),
+            subtitle: Text(
+              node.statusMessage == 'Validation pending'
+                  ? 'Validation pending'
+                  : statusLabel(node.status, node.isOnline),
+              style: text.bodySmall,
+            ),
+            trailing: node.isOnline
+                ? IconButton(
+                    tooltip: 'Chat with this node',
+                    icon: const Icon(Icons.chat_bubble_outline, size: 20),
+                    onPressed: () => _openChat(node),
+                  )
+                : null,
+            onTap: () => widget.open(
+              '/friend_location_detail',
+              arguments: {'location': node},
+            ),
           ),
         );
-      },
-    );
+      }
+    }
+    return ListView(children: rows);
   }
 
   Widget _chatsList(
