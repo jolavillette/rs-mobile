@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/eventsource.dart';
 import 'package:retroshare/common/badge_helper.dart';
-import 'package:retroshare/common/drawer.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare/provider/room.dart';
@@ -173,61 +172,31 @@ class HomeScreenState extends State<HomeScreen> {
 
   static const _titles = ['Home', 'Network', 'People', 'Chat', 'More'];
 
-  List<Widget> _actions() {
-    switch (_tab) {
-      case _chatTab:
-        return [
-          IconButton(
-            tooltip: 'Search',
-            icon: const Icon(Icons.search),
-            onPressed: () => _open('/search', arguments: 0),
-          ),
-          IconButton(
-            tooltip: 'Public chat rooms',
-            icon: const Icon(Icons.public),
-            onPressed: () => _open('/discover_chats'),
-          ),
-          IconButton(
-            tooltip: 'Invitations',
-            icon: const NotificationIcon(),
-            onPressed: () => _open('/notification'),
-          ),
-        ];
-      default:
-        return const [];
-    }
-  }
-
-  Widget? _fab() {
-    switch (_tab) {
-      case _chatTab:
-        return FloatingActionButton(
-          tooltip: 'New chat room',
-          onPressed: () => _open('/create_room'),
-          child: const Icon(Icons.add_comment_outlined),
-        );
-      default:
-        return null;
-    }
-  }
-
-  Widget _chatIcon(bool selected) {
+  /// A navigation icon with the count of what is unread behind it, as the
+  /// web UI badges its menu: rooms and invitations on Chat, direct chats on
+  /// Network, distant chats on People.
+  Widget _badged(IconData icon, int Function(ChatLobby, RoomChatLobby) count) {
     return Consumer2<ChatLobby, RoomChatLobby>(
       builder: (context, chatLobby, roomChatLobby, _) {
-        final unread = chatLobby.subscribedlist
-                .fold(0, (sum, chat) => sum + chat.unreadCount) +
-            roomChatLobby.distantUnreadCount +
-            roomChatLobby.peerUnreadCount +
-            chatLobby.pendingInviteCount;
-        final icon = Icon(selected ? Icons.forum : Icons.forum_outlined);
-        if (unread == 0) return icon;
+        final unread = count(chatLobby, roomChatLobby);
+        if (unread == 0) return Icon(icon);
         return Badge(
           label: Text(unread > 99 ? '99+' : '$unread'),
-          child: icon,
+          child: Icon(icon),
         );
       },
     );
   }
+
+  static int _roomsUnread(ChatLobby chatLobby, RoomChatLobby _) =>
+      chatLobby.subscribedlist.fold(0, (sum, chat) => sum + chat.unreadCount) +
+      chatLobby.pendingInviteCount;
+
+  static int _peerUnread(ChatLobby _, RoomChatLobby roomChatLobby) =>
+      roomChatLobby.peerUnreadCount;
+
+  static int _distantUnread(ChatLobby _, RoomChatLobby roomChatLobby) =>
+      roomChatLobby.distantUnreadCount;
 
   Widget _buildHomeScaffold({required bool desktop}) {
     _desktop = desktop;
@@ -237,7 +206,6 @@ class HomeScreenState extends State<HomeScreen> {
         // The root of the app: nothing to go back to.
         automaticallyImplyLeading: false,
         title: Text(_titles[_tab]),
-        actions: _actions(),
       ),
       body: Stack(
         children: [
@@ -254,8 +222,8 @@ class HomeScreenState extends State<HomeScreen> {
                 onOpenRoom: desktop ? _openRoom : null,
               ),
               ChatsTab(
+                open: _open,
                 onOpenRoom: desktop ? _openRoom : null,
-                onOpenPeerChat: desktop ? _openPeerChat : null,
               ),
               MoreTab(open: _open),
             ],
@@ -271,7 +239,6 @@ class HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      floatingActionButton: _fab(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
@@ -281,19 +248,19 @@ class HomeScreenState extends State<HomeScreen> {
             selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.share_outlined),
-            selectedIcon: Icon(Icons.share),
+          NavigationDestination(
+            icon: _badged(Icons.share_outlined, _peerUnread),
+            selectedIcon: _badged(Icons.share, _peerUnread),
             label: 'Network',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
+          NavigationDestination(
+            icon: _badged(Icons.people_outline, _distantUnread),
+            selectedIcon: _badged(Icons.people, _distantUnread),
             label: 'People',
           ),
           NavigationDestination(
-            icon: _chatIcon(false),
-            selectedIcon: _chatIcon(true),
+            icon: _badged(Icons.forum_outlined, _roomsUnread),
+            selectedIcon: _badged(Icons.forum, _roomsUnread),
             label: 'Chat',
           ),
           const NavigationDestination(
