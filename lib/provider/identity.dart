@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
@@ -32,7 +31,7 @@ class Identities with ChangeNotifier {
     // both back to the first identity undid the user's choice.
     Identity? stillOwn(Identity? id) => id == null
         ? null
-        : _ownidentities.firstWhereOrNull((e) => e.mId == id.mId);
+        : _ownidentities.where((e) => e.mId == id.mId).firstOrNull;
     if (_ownidentities.isNotEmpty) {
       _currentIdentity = stillOwn(_currentIdentity) ?? _ownidentities[0];
       _selected = stillOwn(_selected) ?? _currentIdentity;
