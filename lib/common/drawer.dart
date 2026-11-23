@@ -150,7 +150,10 @@ Widget drawerWidget(
                             ),
                             IconButton(
                               onPressed: () {
-                                showdeleteDialog(context);
+                                final identity = curr.currentIdentity;
+                                if (identity != null) {
+                                  showdeleteDialog(context, identity);
+                                }
                               },
                               icon: const FaIcon(
                                 FontAwesomeIcons.trash,

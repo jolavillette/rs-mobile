@@ -139,7 +139,16 @@ class UpdateIdentityScreenState extends State<UpdateIdentityScreen> {
                   const Spacer(),
                   PopupMenuButton(
                     onSelected: (val) {
-                      showdeleteDialog(context);
+                      // Delete the identity this screen edits, which is not
+                      // necessarily the current one; then leave the screen.
+                      final identity = widget.curr;
+                      if (identity is Identity) {
+                        showdeleteDialog(
+                          context,
+                          identity,
+                          onDeleted: () => Navigator.of(context).pop(),
+                        );
+                      }
                     },
                     icon: const Icon(Icons.more_vert),
                     itemBuilder: (BuildContext context) {

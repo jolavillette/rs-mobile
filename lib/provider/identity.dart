@@ -63,21 +63,25 @@ class Identities with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteIdentity() async {
-    if (_authToken == null || _currentIdentity == null) {
+  /// Deletes [identity], one of ours. When it was the current identity,
+  /// another remaining one becomes current.
+  Future<void> deleteIdentity(Identity identity) async {
+    if (_authToken == null) {
       return;
     }
 
     try {
-      final success =
-          await RsIdentity.deleteIdentity(_currentIdentity!, _authToken!);
+      final success = await RsIdentity.deleteIdentity(identity, _authToken!);
       if (!success) throw HttpException('BAD REQUEST');
-      final deletedId = _currentIdentity!.mId;
-      _ownidentities.removeWhere((element) => element.mId == deletedId);
-      final random = Random();
-      final randomNum = random.nextInt(_ownidentities.length);
-      _currentIdentity = _ownidentities[randomNum];
-      _selected = _currentIdentity;
+      _ownidentities.removeWhere((element) => element.mId == identity.mId);
+      if (_currentIdentity?.mId == identity.mId) {
+        _currentIdentity = _ownidentities.isEmpty
+            ? null
+            : _ownidentities[Random().nextInt(_ownidentities.length)];
+      }
+      if (_selected?.mId == identity.mId) {
+        _selected = _currentIdentity;
+      }
       notifyListeners();
     } catch (e) {
       throw Exception(e.toString());
