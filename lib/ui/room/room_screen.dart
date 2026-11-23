@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:retroshare/common/identicon.dart';
 import 'package:retroshare/common/person_delegate.dart';
 import 'package:retroshare/common/styles.dart';
+import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/provider/subscribed.dart';
@@ -14,7 +15,15 @@ import 'package:retroshare/ui/room/room_friends_tab.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum _ChatMenuAction { search, clearChat, bubble, compact }
+enum _ChatMenuAction {
+  search,
+  clearChat,
+  bubble,
+  compact,
+  participants,
+  invite,
+  leave,
+}
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({
@@ -206,6 +215,125 @@ class RoomScreenState extends State<RoomScreen>
     }
   }
 
+  /// Invites online friends into this room, as the web UI's Invite friends.
+  Future<void> _inviteFriends() async {
+    final lobbyId = widget.chat.chatId;
+    final authToken =
+        Provider.of<AccountCredentials>(context, listen: false).authtoken;
+    if (lobbyId == null || authToken == null) return;
+    final nodes = Provider.of<FriendLocations>(context, listen: false)
+        .friendlist
+        .where((l) => l.isOnline)
+        .toList()
+      ..sort(
+        (a, b) => a.accountName.toLowerCase().compareTo(
+              b.accountName.toLowerCase(),
+            ),
+      );
+    final picked = <String>{};
+    final invite = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Invite friends'),
+          content: nodes.isEmpty
+              ? const Text('No friend is online.')
+              : SizedBox(
+                  width: double.maxFinite,
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final node in nodes)
+                        CheckboxListTile(
+                          value: picked.contains(node.rsPeerId),
+                          title: Text(node.accountName),
+                          subtitle: Text(node.locationName),
+                          onChanged: (on) => setDialogState(() {
+                            if (on == true) {
+                              picked.add(node.rsPeerId);
+                            } else {
+                              picked.remove(node.rsPeerId);
+                            }
+                          }),
+                        ),
+                    ],
+                  ),
+                ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: picked.isEmpty
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Invite'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (invite != true || picked.isEmpty) return;
+    var sent = 0;
+    for (final peerId in picked) {
+      try {
+        await rsApiCall(
+          '/rsChats/invitePeerToLobby',
+          authToken: authToken,
+          params: {
+            'lobby_id': {'xstr64': lobbyId},
+            'peer_id': peerId,
+          },
+        );
+        sent++;
+      } catch (e) {
+        debugPrint('Cannot invite $peerId: $e');
+      }
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          sent == picked.length
+              ? 'Invitation sent to $sent friend${sent == 1 ? '' : 's'}.'
+              : 'Invitation sent to $sent of ${picked.length} friends.',
+        ),
+      ),
+    );
+  }
+
+  /// Leaves this room (unsubscribes), after a confirmation.
+  Future<void> _leaveRoom() async {
+    final lobbyId = widget.chat.chatId;
+    if (lobbyId == null) return;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Leave room'),
+        content: Text('Leave ${widget.chat.chatName ?? 'this room'}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Leave room'),
+          ),
+        ],
+      ),
+    );
+    if (leave != true || !mounted) return;
+    await Provider.of<ChatLobby>(context, listen: false).unsubscribed(lobbyId);
+    if (!mounted) return;
+    if (widget.onBack != null) {
+      widget.onBack!();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   Future<void> _handleMenuAction(_ChatMenuAction action) async {
     switch (action) {
       case _ChatMenuAction.search:
@@ -214,6 +342,15 @@ class RoomScreenState extends State<RoomScreen>
         return;
       case _ChatMenuAction.clearChat:
         await _clearChat();
+        return;
+      case _ChatMenuAction.participants:
+        _tabController.animateTo(1);
+        return;
+      case _ChatMenuAction.invite:
+        await _inviteFriends();
+        return;
+      case _ChatMenuAction.leave:
+        await _leaveRoom();
         return;
       case _ChatMenuAction.bubble:
       case _ChatMenuAction.compact:
@@ -369,19 +506,33 @@ class RoomScreenState extends State<RoomScreen>
                       ),
                     ),
                   ),
+                  // The participants, as the web UI's Participants (n): the
+                  // count shows, a tap switches to their list and back.
                   if (widget.isRoom)
-                    AnimatedBuilder(
-                      animation: _tabController.animation!,
-                      builder: (BuildContext context, Widget? child) {
-                        return IconButton(
-                          icon: const Icon(
-                            Icons.people,
-                            size: 25,
-                          ),
-                          color: _iconAnimation.value ?? Colors.grey,
-                          tooltip: 'View Participants',
-                          onPressed: () {
-                            _tabController.animateTo(1 - _tabController.index);
+                    Consumer<RoomChatLobby>(
+                      builder: (context, lobby, _) {
+                        final count = lobby
+                                .lobbyParticipants[widget.chat.chatId]
+                                ?.length ??
+                            0;
+                        return AnimatedBuilder(
+                          animation: _tabController.animation!,
+                          builder: (BuildContext context, Widget? child) {
+                            return Tooltip(
+                              message: 'Participants',
+                              child: TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  foregroundColor:
+                                      _iconAnimation.value ?? Colors.grey,
+                                ),
+                                icon: const Icon(Icons.people_outline),
+                                label: Text('$count'),
+                                onPressed: () {
+                                  _tabController
+                                      .animateTo(1 - _tabController.index);
+                                },
+                              ),
+                            );
                           },
                         );
                       },
@@ -407,6 +558,33 @@ class RoomScreenState extends State<RoomScreen>
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
+                      if (widget.isRoom) ...[
+                        const PopupMenuDivider(),
+                        const PopupMenuItem<_ChatMenuAction>(
+                          value: _ChatMenuAction.participants,
+                          child: ListTile(
+                            leading: Icon(Icons.people_outline),
+                            title: Text('Participants'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        const PopupMenuItem<_ChatMenuAction>(
+                          value: _ChatMenuAction.invite,
+                          child: ListTile(
+                            leading: Icon(Icons.person_add_alt),
+                            title: Text('Invite friends'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        const PopupMenuItem<_ChatMenuAction>(
+                          value: _ChatMenuAction.leave,
+                          child: ListTile(
+                            leading: Icon(Icons.logout),
+                            title: Text('Leave room'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
                       if (!widget.isRoom) const PopupMenuDivider(),
                       if (!widget.isRoom)
                         const PopupMenuItem<_ChatMenuAction>(

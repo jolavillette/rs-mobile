@@ -25,11 +25,6 @@ class MoreTab extends StatelessWidget {
           title: const Text('Settings'),
           onTap: () => open('/settings'),
         ),
-        ListTile(
-          leading: const Icon(Icons.public),
-          title: const Text('Public chat rooms'),
-          onTap: () => open('/discover_chats'),
-        ),
         const Divider(),
         Padding(
           padding: const EdgeInsets.fromLTRB(

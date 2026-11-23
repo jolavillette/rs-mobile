@@ -135,10 +135,20 @@ class RoomFriendsTabState extends State<RoomFriendsTab> {
                 : ListView.builder(
                     padding: const EdgeInsets.all(16),
                     // 6. Simplify itemCount
-                    itemCount: participantList.length,
+                    // The first row names the list, as the web UI's
+                    // Participants (n).
+                    itemCount: participantList.length + 1,
                     itemBuilder: (BuildContext context, int index) {
-                      // 6. Access is safe now assuming participantList is non-null List
-                      final participant = participantList[index];
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'Participants (${participantList.length})',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        );
+                      }
+                      final participant = participantList[index - 1];
                       final isMe = currentIdentity?.mId == participant.mId;
 
                       return PersonDelegate(
