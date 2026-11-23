@@ -204,8 +204,10 @@ class NotificationScreenState extends State<NotificationScreen> {
                                                         if (!context.mounted) {
                                                           return;
                                                         }
-                                                        Navigator.of(context)
-                                                            .pushNamed('/home');
+                                                        // Back to where the user came from: pushing
+                                                        // '/home' stacked a second home screen.
+                                                        await Navigator.of(context)
+                                                            .maybePop();
                                                       },
                                                       child: const Text(
                                                         'Accept',
