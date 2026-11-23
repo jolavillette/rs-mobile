@@ -607,11 +607,16 @@ class RoomChatLobby with ChangeNotifier {
     } else if (to is Chat) {
       chat = to;
       if (chat.isPublic) {
+        // Joining again only matters for a public lobby we have left. The
+        // core refuses it whenever the lobby is not in its visible list at
+        // that moment (no connected friend advertises it), even when we are
+        // subscribed, and the exception made a tap on the room do nothing.
+        // Open the room anyway.
         try {
           await joinChatLobby(chat, currentId);
         } catch (e) {
-          debugPrint('Failed to auto-join lobby ${chat.chatId}: $e');
-          rethrow;
+          debugPrint('Could not join lobby ${chat.chatId} again, opening it '
+              'anyway: $e');
         }
       }
     } else if (to != null) {
