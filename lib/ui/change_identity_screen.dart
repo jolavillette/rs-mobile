@@ -30,7 +30,12 @@ class ChangeIdentityScreenState extends State<ChangeIdentityScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: appBar('Change Identity', context),
+      appBar: appBar('Identities', context),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('New identity'),
+        onPressed: () => Navigator.pushNamed(context, '/create_identity'),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(8),
