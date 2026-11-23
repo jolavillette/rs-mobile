@@ -45,6 +45,7 @@ class Identities with ChangeNotifier {
       _currentIdentity =
           stillOwn(_currentIdentity) ?? saved ?? _ownidentities[0];
       _selected = stillOwn(_selected) ?? _currentIdentity;
+      _setDefaultRoomIdentity();
     }
     notifyListeners();
   }
@@ -65,6 +66,28 @@ class Identities with ChangeNotifier {
     unawaited(
       SharedPreferences.getInstance()
           .then((prefs) => prefs.setString(_activeIdentityKey, id)),
+    );
+    _setDefaultRoomIdentity();
+  }
+
+  /// The active identity is also the core's default identity for chat rooms,
+  /// the one a room is joined with, invitations included. A room already
+  /// joined keeps its own identity.
+  void _setDefaultRoomIdentity() {
+    final id = _currentIdentity?.mId;
+    final token = _authToken;
+    if (id == null || token == null) return;
+    unawaited(
+      rsApiCall(
+        '/rsChats/setDefaultIdentityForChatLobby',
+        authToken: token,
+        params: {'nick': id},
+      ).then<void>(
+        (_) {},
+        onError: (Object e) {
+          debugPrint('Cannot set the default identity for chat rooms: $e');
+        },
+      ),
     );
   }
 
