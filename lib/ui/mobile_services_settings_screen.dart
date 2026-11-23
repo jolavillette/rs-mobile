@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/mobile_services.dart';
+import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
-/// The core services the app has no page for. They are off: the app turns
-/// them off at every login. Turning one on here asks for confirmation and is
-/// remembered for this node, so the next login leaves it on.
+/// Every service the core runs, in three groups: those the app needs (shown,
+/// not switchable), those the app has no page for (off; the app turns them
+/// off at every login, turning one on here asks for confirmation and is
+/// remembered for this node), and any other service the core reports.
 class MobileServicesSettingsScreen extends StatefulWidget {
   const MobileServicesSettingsScreen({super.key});
 
@@ -19,7 +21,10 @@ class _MobileServicesSettingsScreenState
     extends State<MobileServicesSettingsScreen> {
   bool _isLoading = true;
 
-  /// On or off, by service type, for the services this core runs.
+  /// The services the core runs: 16-bit type -> the core's name.
+  Map<int, String> _coreServices = {};
+
+  /// On or off, by service type.
   final Map<int, bool> _on = {};
   final Set<int> _updating = {};
 
@@ -34,20 +39,20 @@ class _MobileServicesSettingsScreenState
       final authToken =
           Provider.of<AccountCredentials>(context, listen: false).authtoken;
       if (authToken == null) return;
-      for (final service in optionalServices) {
+      final services = await coreServices(authToken);
+      for (final type in services.keys) {
         final permissions = await RsServiceControl.getServicePermissions(
-          service.fullId,
+          rsFullServiceId(type),
           authToken,
         );
-        if (isServiceKnown(permissions, service)) {
-          _on[service.type] = isServiceOn(permissions);
-        }
+        _on[type] = isServiceOn(permissions);
       }
+      _coreServices = services;
     } catch (error) {
-      debugPrint('Failed to load service permissions: $error');
+      debugPrint('Failed to load the services: $error');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not load mobile services.')),
+          const SnackBar(content: Text('Could not load the services.')),
         );
       }
     } finally {
@@ -55,7 +60,7 @@ class _MobileServicesSettingsScreenState
     }
   }
 
-  Future<bool> _confirmTurnOn(OptionalService service) async {
+  Future<bool> _confirmTurnOn(MobileService service) async {
     final turnOn = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -81,7 +86,7 @@ class _MobileServicesSettingsScreenState
     return turnOn == true;
   }
 
-  Future<void> _setServiceOn(OptionalService service, bool on) async {
+  Future<void> _setServiceOn(MobileService service, bool on) async {
     final auth = Provider.of<AccountCredentials>(context, listen: false);
     final authToken = auth.authtoken;
     final locationId = auth.loggedinAccount?.locationId;
@@ -111,49 +116,111 @@ class _MobileServicesSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final shown = optionalServices.where((s) => _on.containsKey(s.type));
+    final needed =
+        neededServices.where((s) => _coreServices.containsKey(s.type));
+    final optional =
+        optionalServices.where((s) => _coreServices.containsKey(s.type));
+    final listed = {
+      ...neededServices.map((s) => s.type),
+      ...optionalServices.map((s) => s.type),
+    };
+    final others = (_coreServices.keys.where((t) => !listed.contains(t))
+        .toList()
+      ..sort());
+
     return Scaffold(
       appBar: AppBar(title: const Text('Mobile Services')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  'Every service the RetroShare core runs on this phone. The '
+                  'services the app has no page for are off: they would use '
+                  'CPU, mobile data, battery and storage for nothing you can '
+                  'see. The app turns them off at every start, except the '
+                  'ones you turn on here.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                _section(
+                  'Needed by the app',
+                  [for (final s in needed) _statusTile(s.name, s.role, s.type)],
+                ),
+                _section(
+                  'No page in the app',
+                  [for (final s in optional) _serviceSwitch(s)],
+                ),
+                if (others.isNotEmpty)
+                  _section('Other services', [
+                    for (final type in others)
+                      _statusTile(
+                        _coreServices[type]!.isEmpty
+                            ? 'Service 0x${type.toRadixString(16).padLeft(4, '0')}'
+                            : _coreServices[type]!,
+                        'Not handled by the app.',
+                        type,
+                      ),
+                  ]),
+              ],
+            ),
+    );
+  }
+
+  Widget _section(String title, List<Widget> tiles) {
+    final theme = Theme.of(context);
+    if (tiles.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'RetroShare Mobile has no page for these services, so they are '
-            'off: on a phone they would use CPU, mobile data, battery and '
-            'storage for nothing you can see. The app turns them off at every '
-            'start, except the ones you turn on here.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(title, style: theme.textTheme.titleSmall),
+          ),
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: theme.colorScheme.outlineVariant.withAlpha(128),
+              ),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < tiles.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, indent: 64),
+                  tiles[i],
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: theme.colorScheme.outlineVariant.withAlpha(128),
-                ),
-              ),
-              child: Column(
-                children: [
-                  for (final service in shown) ...[
-                    if (service != shown.first)
-                      const Divider(height: 1, indent: 64),
-                    _serviceSwitch(service),
-                  ],
-                ],
-              ),
-            ),
         ],
       ),
     );
   }
 
-  Widget _serviceSwitch(OptionalService service) {
+  /// A service shown with its state, without a switch.
+  Widget _statusTile(String name, String role, int type) {
+    final theme = Theme.of(context);
+    final on = _on[type] ?? false;
+    return ListTile(
+      leading: const Icon(Icons.lock_outline_rounded),
+      title: Text(name),
+      subtitle: Text(role),
+      trailing: Text(
+        on ? 'On' : 'Off',
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: on ? theme.colorScheme.primary : theme.colorScheme.error,
+        ),
+      ),
+    );
+  }
+
+  Widget _serviceSwitch(MobileService service) {
     final updating = _updating.contains(service.type);
     return SwitchListTile(
       secondary: updating
@@ -166,8 +233,7 @@ class _MobileServicesSettingsScreenState
       title: Text(service.name),
       subtitle: Text(service.role),
       value: _on[service.type] ?? false,
-      onChanged:
-          updating ? null : (on) => _setServiceOn(service, on),
+      onChanged: updating ? null : (on) => _setServiceOn(service, on),
     );
   }
 }

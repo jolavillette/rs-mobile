@@ -394,7 +394,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                             icon: Icons.widgets_rounded,
                             iconBgColor: Colors.indigo,
                             title: 'Mobile Services',
-                            subtitle: 'Services the app has no page for',
+                            subtitle: 'Every service the core runs',
                             onTap: () {
                               Navigator.pushNamed(
                                 context,

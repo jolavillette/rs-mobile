@@ -3,11 +3,9 @@ import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// A core service the app has no page for: on a phone it costs CPU, mobile
-/// data, battery or storage for nothing the user can see. The app turns it
-/// off at every login, unless the user turned it on in Mobile Services.
-class OptionalService {
-  const OptionalService(this.type, this.name, this.role);
+/// A core service as Mobile Services shows it.
+class MobileService {
+  const MobileService(this.type, this.name, this.role);
 
   /// 16-bit service type.
   final int type;
@@ -19,48 +17,122 @@ class OptionalService {
   int get fullId => rsFullServiceId(type);
 }
 
-const optionalServices = <OptionalService>[
-  OptionalService(
+/// The services the app needs (chats, rooms, distant chats, identities,
+/// presence, attachments) or that keep the connections healthy. Mobile
+/// Services shows them, it does not let the user turn them off.
+const neededServices = <MobileService>[
+  MobileService(
+    RsServiceTypes.serviceInfo,
+    'Service info',
+    'Tells friends which services this node runs.',
+  ),
+  MobileService(
+    RsServiceTypes.heartbeat,
+    'Heartbeat',
+    'Keeps the connections with friends alive.',
+  ),
+  MobileService(
+    RsServiceTypes.discovery,
+    'Discovery',
+    "Exchanges friends' addresses and keys.",
+  ),
+  MobileService(
+    RsServiceTypes.chat,
+    'Chat',
+    'Chats with friends, chat rooms and their invitations.',
+  ),
+  MobileService(
+    RsServiceTypes.status,
+    'Status',
+    'Online, away or busy.',
+  ),
+  MobileService(
+    RsServiceTypes.identities,
+    'Identities',
+    'Your identities and those of the people you talk to.',
+  ),
+  MobileService(
+    RsServiceTypes.reputation,
+    'Reputation',
+    'Opinions on identities, used by the identities.',
+  ),
+  MobileService(
+    RsServiceTypes.turtle,
+    'Turtle',
+    'Anonymous tunnels, used by distant chats.',
+  ),
+  MobileService(
+    RsServiceTypes.gxsTunnels,
+    'GXS tunnels',
+    'Distant chats with identities.',
+  ),
+  MobileService(
+    RsServiceTypes.fileTransfer,
+    'File transfer',
+    'Files attached to chat messages.',
+  ),
+  MobileService(
+    RsServiceTypes.bandwidthControl,
+    'Bandwidth control',
+    'Shares the bandwidth between friends.',
+  ),
+  MobileService(
+    RsServiceTypes.rtt,
+    'RTT',
+    'Measures the delay to each friend.',
+  ),
+  MobileService(
+    RsServiceTypes.banList,
+    'Ban list',
+    'Shares banned IP addresses with friends.',
+  ),
+];
+
+/// The services the app has no page for: on a phone they cost CPU, mobile
+/// data, battery or storage for nothing the user can see. The app turns them
+/// off at every login, except those the user turned on in Mobile Services.
+const optionalServices = <MobileService>[
+  MobileService(
     RsServiceTypes.forums,
     'Forums',
     "Synchronizes your friends' forums.",
   ),
-  OptionalService(
+  MobileService(
     RsServiceTypes.channels,
     'Channels',
     "Synchronizes your friends' channels, the heaviest of these services.",
   ),
-  OptionalService(
+  MobileService(
     RsServiceTypes.boards,
     'Boards',
     "Synchronizes your friends' boards.",
   ),
-  OptionalService(
+  MobileService(
     RsServiceTypes.circles,
     'Circles',
     "Synchronizes your friends' circles.",
   ),
-  OptionalService(
+  MobileService(
     RsServiceTypes.calendar,
     'Calendar',
     "Synchronizes your friends' calendars.",
   ),
-  OptionalService(
+  MobileService(
     RsServiceTypes.messages,
     'Mail',
     'Mail between friends.',
   ),
-  OptionalService(
+  MobileService(
     RsServiceTypes.gxsMails,
     'Distant mail (GXS Trans)',
     'Stores and relays the encrypted distant mail of the network for 15 days.',
   ),
-  OptionalService(
+  MobileService(
     RsServiceTypes.globalRouter,
     'Global router',
     'Routes, relays and caches distant mail for other nodes.',
   ),
-  OptionalService(
+  MobileService(
     RsServiceTypes.fileDatabase,
     'File lists',
     'Exchanges the lists of shared files with your friends.',
@@ -76,7 +148,7 @@ bool isServiceOn(Map<String, dynamic> permissions) {
 
 /// Whether [permissions] belong to a service this core runs: for an unknown
 /// service the core answers with empty permissions (service id 0).
-bool isServiceKnown(Map<String, dynamic> permissions, OptionalService service) =>
+bool isServiceKnown(Map<String, dynamic> permissions, MobileService service) =>
     permissions['mServiceId'] == service.fullId;
 
 String _optedInKey(String locationId) => 'optional_services_on_$locationId';
@@ -125,4 +197,32 @@ Future<void> turnOffOptionalServices(AuthToken token, String locationId) async {
       debugPrint('Mobile services: cannot turn ${service.name} off: $error');
     }
   }
+}
+
+/// Every service this core runs, by 16-bit type, with the name the core gives
+/// it (rsServiceControl getOwnServices).
+Future<Map<int, String>> coreServices(AuthToken token) async {
+  final response = await rsApiCall(
+    '/rsServiceControl/getOwnServices',
+    authToken: token,
+  );
+  final info = response['info'];
+  final list = info is Map ? info['mServiceList'] : null;
+  final entries = list is List
+      ? list.whereType<Map>().map((e) => e['value'])
+      : list is Map
+          ? list.values
+          : const Iterable<Object?>.empty();
+  final result = <int, String>{};
+  for (final service in entries.whereType<Map>()) {
+    var rawType = service['mServiceType'];
+    if (rawType is Map) rawType = rawType['xint64'] ?? rawType['xstr64'];
+    final fullId = rawType is num
+        ? rawType.toInt()
+        : int.tryParse('${rawType ?? ''}') ?? 0;
+    if (fullId == 0) continue;
+    result[rsServiceType(fullId)] =
+        service['mServiceName']?.toString().trim() ?? '';
+  }
+  return result;
 }
