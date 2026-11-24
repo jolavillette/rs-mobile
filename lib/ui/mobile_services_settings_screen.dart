@@ -133,7 +133,13 @@ class _MobileServicesSettingsScreenState
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16),
+              // Down to above the system navigation bar.
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                16 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               children: [
                 Text(
                   'Every service the RetroShare core runs on this phone. The '
