@@ -1,3 +1,4 @@
+import 'package:retroshare/common/rs_logo.dart';
 import 'package:flutter/material.dart';
 
 class LaunchTransitionScreen extends StatefulWidget {
@@ -25,13 +26,11 @@ class LaunchTransitionScreenState extends State<LaunchTransitionScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: <Widget>[
-                        Expanded(
+                        const Expanded(
                           flex: 7,
                           child: Hero(
                             tag: 'logo',
-                            child: Image.asset(
-                              'assets/rs-logo.png',
-                            ),
+                            child: RsLogo(),
                           ),
                         ),
                         Expanded(

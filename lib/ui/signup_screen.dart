@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:oktoast/oktoast.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/common/rs_logo.dart';
 import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare/provider/auth.dart';
@@ -115,12 +116,12 @@ class SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildLogo() {
-    return Hero(
+    return const Hero(
       tag: 'logo',
-      child: Image.asset(
-        'assets/rs-logo.png',
+      child: SizedBox(
         height: 250,
         width: 250,
+        child: RsLogo(),
       ),
     );
   }
