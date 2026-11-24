@@ -28,16 +28,15 @@ Future<void> setDhtOn(String locationId, bool on) async {
 }
 
 /// Sets the core's DHT as the user chose it, keeping its discovery setting.
-/// Called at each login. Errors are logged, never thrown.
+/// Called at each login. locationId is the node's own SSL id. Errors are
+/// logged, never thrown.
 Future<void> applyDht(AuthToken token, String locationId) async {
   final on = await dhtOn(locationId);
   try {
-    final own = await rsApiCall('/rsPeers/getOwnId', authToken: token);
-    final ownId = own['retval'];
     final details = await rsApiCall(
       '/rsPeers/getPeerDetails',
       authToken: token,
-      params: {'sslId': ownId},
+      params: {'sslId': locationId},
     );
     final det = details['det'];
     final vsDisc = det is Map ? det['vs_disc'] : null;
@@ -45,7 +44,7 @@ Future<void> applyDht(AuthToken token, String locationId) async {
       '/rsPeers/setVisState',
       authToken: token,
       params: {
-        'sslId': ownId,
+        'sslId': locationId,
         'vsDisc': vsDisc is int ? vsDisc : 2,
         'vsDht': on ? _dhtFull : _dhtOff,
       },
