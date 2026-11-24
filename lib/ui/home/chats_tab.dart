@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/identity_avatar.dart';
 import 'package:retroshare/common/rs_tokens.dart';
@@ -273,10 +274,20 @@ class _ChatsTabState extends State<ChatsTab> {
     String preview(Chat chat) {
       final messages = roomChat.messagesList[chat.chatId];
       if (messages == null || messages.isEmpty) return '';
-      // Messages are rich text: the preview is their text only.
-      return (messages.last.msg ?? '')
-          .replaceAll(RegExp('<[^>]*>'), '')
-          .replaceAll('&nbsp;', ' ')
+      // Messages are rich text: the preview is their text only, on one
+      // line. The desktop puts a style sheet in front of its messages
+      // (<style>.S1{...}</style>), whose rules are no text to show.
+      final document = html_parser.parse(
+        (messages.last.msg ?? '').replaceAll(
+          RegExp(r'<br\s*/?>|</p\s*>', caseSensitive: false),
+          ' ',
+        ),
+      );
+      for (final element in document.querySelectorAll('style, script')) {
+        element.remove();
+      }
+      return (document.body?.text ?? '')
+          .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
     }
 
