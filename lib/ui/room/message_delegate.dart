@@ -210,8 +210,8 @@ class MessageDelegate extends StatelessWidget {
       );
     }
 
-    // As in every messenger (and in the rooms above): my messages on the
-    // right, the others' and the system's on the left.
+    // As in every messenger: my messages on the right, the others' and the
+    // system's on the left.
     final mine = !isIncoming && !isSystem;
 
     // Custom RetroShare Bubble Look
