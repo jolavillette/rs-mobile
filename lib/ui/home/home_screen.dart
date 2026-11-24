@@ -14,6 +14,7 @@ import 'package:retroshare/ui/home/more_tab.dart';
 import 'package:retroshare/ui/home/network_tab.dart';
 import 'package:retroshare/ui/home/people_tab.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Chat, Location;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 
 const double _desktopBreakpoint = 840;
@@ -29,6 +30,9 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   // The bottom navigation of the web UI: Home, Network, People, Chat, More.
   static const _chatTab = 3;
+  static const _tabCount = 5;
+  // The tab the app was on when it was left, opened again at start.
+  static const _tabKey = 'home_tab';
   int _tab = _chatTab;
   bool _desktop = false;
   bool _isInit = true;
@@ -63,6 +67,7 @@ class HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _isInit = true;
+    _restoreTab();
 
     // Start periodic invite check
     _inviteCheckTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
@@ -83,6 +88,28 @@ class HomeScreenState extends State<HomeScreen> {
     }
     _isInit = false;
     super.didChangeDependencies();
+  }
+
+  /// Opens the tab the app was on when it was left; Chat the first time.
+  Future<void> _restoreTab() async {
+    try {
+      final saved = (await SharedPreferences.getInstance()).getInt(_tabKey);
+      if (saved != null && saved >= 0 && saved < _tabCount && mounted) {
+        setState(() => _tab = saved);
+      }
+    } catch (e) {
+      debugPrint('Cannot read the last tab: $e');
+    }
+  }
+
+  void _selectTab(int tab) {
+    setState(() => _tab = tab);
+    SharedPreferences.getInstance()
+        .then((prefs) => prefs.setInt(_tabKey, tab))
+        .catchError((Object e) {
+      debugPrint('Cannot keep the tab: $e');
+      return false;
+    });
   }
 
   void _updateAppBadge() {
@@ -241,7 +268,7 @@ class HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: _selectTab,
         destinations: [
           const NavigationDestination(
             icon: Icon(Icons.home_outlined),
