@@ -426,7 +426,10 @@ class NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 30),
+                  // Down to above the system navigation bar.
+                  SizedBox(
+                    height: 30 + MediaQuery.viewPaddingOf(context).bottom,
+                  ),
                 ],
               ),
             ),
