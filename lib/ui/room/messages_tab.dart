@@ -436,14 +436,9 @@ class MessagesTabState extends State<MessagesTab> {
   }
 
   Future<void> _sendImage() async {
-    // The picker scales down first: decoding a full photo here is slow, and
-    // prepareChatImage() goes down to 640 × 480 anyway.
-    final imageXFile = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 95,
-      maxWidth: 1280,
-      maxHeight: 1280,
-    );
+    // The photo as it is: the picker's own scaling picks pixels without
+    // smoothing and leaves jagged edges; prepareChatImage() scales it.
+    final imageXFile = await _picker.pickImage(source: ImageSource.gallery);
 
     if (imageXFile == null) {
       debugPrint('Image selection cancelled.');
@@ -529,12 +524,8 @@ class MessagesTabState extends State<MessagesTab> {
   }
 
   Future<void> _pickFromCamera() async {
-    final imageXFile = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 95,
-      maxWidth: 1280,
-      maxHeight: 1280,
-    );
+    // The photo as it is, as _sendImage() takes it.
+    final imageXFile = await _picker.pickImage(source: ImageSource.camera);
     if (imageXFile != null) {
       await _processPickedImage(imageXFile);
     }
