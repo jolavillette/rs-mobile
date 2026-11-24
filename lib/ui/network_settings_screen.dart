@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/apiUtils/turtle_relay.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
@@ -13,10 +14,60 @@ class NetworkSettingsScreen extends StatefulWidget {
 
 class NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   late Future<Map<String, dynamic>> _networkDetailsFuture;
+  // Whether this node relays the other nodes' tunnels and searches; null
+  // until read.
+  bool? _relayOn;
+
   @override
   void initState() {
     super.initState();
     _refreshDetails();
+    _loadRelay();
+  }
+
+  Future<void> _loadRelay() async {
+    final locationId = Provider.of<AccountCredentials>(context, listen: false)
+        .loggedinAccount
+        ?.locationId;
+    if (locationId == null) return;
+    final on = await turtleRelayOn(locationId);
+    if (mounted) setState(() => _relayOn = on);
+  }
+
+  /// Turns the relay for the other nodes on or off. On asks first: it costs
+  /// battery and mobile data.
+  Future<void> _setRelay(bool on) async {
+    final auth = Provider.of<AccountCredentials>(context, listen: false);
+    final token = auth.authtoken;
+    final locationId = auth.loggedinAccount?.locationId;
+    if (token == null || locationId == null) return;
+    if (on) {
+      final sure = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Relay for other nodes?'),
+          content: const Text(
+            'This node will pass on the tunnel and search requests of other '
+            'nodes, and carry the data of the tunnels built through it. It '
+            'helps the network, and costs battery and mobile data.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Relay'),
+            ),
+          ],
+        ),
+      );
+      if (sure != true || !mounted) return;
+    }
+    await setTurtleRelayOn(locationId, on);
+    await applyTurtleRelay(token, locationId);
+    if (mounted) setState(() => _relayOn = on);
   }
 
   void _refreshDetails() {
@@ -320,6 +371,23 @@ class NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                     icon: dhtIcon,
                     color: dhtColor,
                   ),
+                  if (_relayOn != null) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      margin: EdgeInsets.zero,
+                      child: SwitchListTile(
+                        secondary: const Icon(Icons.alt_route_rounded),
+                        title: const Text('Relay for other nodes'),
+                        subtitle: const Text(
+                          'Their tunnels and searches. Off saves battery and '
+                          'mobile data; your own chats and downloads work '
+                          'either way.',
+                        ),
+                        value: _relayOn!,
+                        onChanged: _setRelay,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 30),
                 ],
               ),
