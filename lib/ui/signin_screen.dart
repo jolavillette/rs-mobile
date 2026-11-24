@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:oktoast/oktoast.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/rs_logo.dart';
-import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
@@ -24,6 +23,9 @@ class SignInScreenState extends State<SignInScreen> {
   late Account? currentAccount;
   late bool hideLocations;
   late bool wrongPassword;
+
+  /// Why the last login failed, when not for a wrong password.
+  String? loginError;
 
   @override
   void initState() {
@@ -84,34 +86,23 @@ class SignInScreenState extends State<SignInScreen> {
       }
     } on HttpException catch (error) {
       if (!mounted) return;
-      if (error.message.contains('WRONG PASSWORD')) {
-        _handleWrongPassword();
-      } else {
-        await errorShowDialog(
-          'Authentication Failed',
-          error.message,
-          context,
-        );
-        if (Navigator.canPop(context)) Navigator.pop(context);
-      }
+      _showLoginError(
+        error.message.contains('WRONG PASSWORD') ? null : error.message,
+      );
     } catch (e) {
       if (!mounted) return;
-      await errorShowDialog(
-        'Retroshare Service Down',
-        'An error occurred: $e'.trim(),
-        context,
-      );
-      if (Navigator.canPop(context)) Navigator.pop(context);
+      _showLoginError('The RetroShare service did not answer: $e');
     }
   }
 
-  void _handleWrongPassword() {
+  /// Back from the loading screen to this one, with the reason under the
+  /// password field; error is null for a wrong password.
+  void _showLoginError(String? error) {
     if (Navigator.canPop(context)) Navigator.pop(context);
-    if (mounted) {
-      setState(() {
-        wrongPassword = true;
-      });
-    }
+    setState(() {
+      wrongPassword = error == null;
+      loginError = error;
+    });
   }
 
   List<DropdownMenuItem<Account>> _buildDropdownMenuItems() {
@@ -150,6 +141,7 @@ class SignInScreenState extends State<SignInScreen> {
       setState(() {
         currentAccount = selectedAccount;
         wrongPassword = false;
+        loginError = null;
       });
     }
   }
@@ -250,6 +242,7 @@ class SignInScreenState extends State<SignInScreen> {
             if (mounted) {
               setState(() {
                 wrongPassword = false;
+                loginError = null;
               });
             }
           },
@@ -260,15 +253,15 @@ class SignInScreenState extends State<SignInScreen> {
 
   Widget _buildWrongPasswordError() {
     return Visibility(
-      visible: wrongPassword,
+      visible: wrongPassword || loginError != null,
       maintainState: true,
       maintainAnimation: true,
       maintainSize: true,
-      child: const Padding(
-        padding: EdgeInsets.only(top: 8, left: 16, right: 16),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
         child: Text(
-          'Wrong password. Please try again.',
-          style: TextStyle(color: Colors.red, fontSize: 12),
+          loginError ?? 'Wrong password. Please try again.',
+          style: const TextStyle(color: Colors.red, fontSize: 12),
           textAlign: TextAlign.center,
         ),
       ),

@@ -149,8 +149,13 @@ class AccountCredentials with ChangeNotifier {
         throw const HttpException('AUTHTOKEN FAILED');
       }
       notifyListeners();
-    } else if (resp == 2) {
+    } else if (resp == 7) {
+      // RsInit::ERR_MISSING_PASSPHRASE: the password does not open the
+      // profile's key.
       throw const HttpException('WRONG PASSWORD');
+    } else if (resp == 2) {
+      // RsInit::ERR_CANT_ACQUIRE_LOCK: another RetroShare uses this profile.
+      throw const HttpException('Another RetroShare is using this profile.');
     } else {
       throw HttpException('LOGIN FAILED (code $resp)');
     }
