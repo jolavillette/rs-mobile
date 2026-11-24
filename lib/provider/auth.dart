@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:retroshare/apiUtils/dht_switch.dart';
 import 'package:retroshare/apiUtils/mobile_link.dart';
 import 'package:retroshare/apiUtils/mobile_services.dart';
 import 'package:retroshare/apiUtils/retroshare_service.dart' as mobile_service;
@@ -91,6 +92,7 @@ class AccountCredentials with ChangeNotifier {
       if (await RsJsonApi.isAuthTokenValid(token)) {
         await turnOffOptionalServices(token, account.locationId);
         await applyTurtleRelay(token, account.locationId);
+        await applyDht(token, account.locationId);
         await applyPhoneMode(token);
         return true;
       }
@@ -104,6 +106,7 @@ class AccountCredentials with ChangeNotifier {
         if (await RsJsonApi.isAuthTokenValid(token)) {
           await turnOffOptionalServices(token, account.locationId);
           await applyTurtleRelay(token, account.locationId);
+          await applyDht(token, account.locationId);
           await applyPhoneMode(token);
           return true;
         }
@@ -270,6 +273,7 @@ class AccountCredentials with ChangeNotifier {
       if (locationId != null) {
         await turnOffOptionalServices(_authToken!, locationId);
         await applyTurtleRelay(_authToken!, locationId);
+        await applyDht(_authToken!, locationId);
         await applyPhoneMode(_authToken!);
       }
       await fetchAuthAccountList();

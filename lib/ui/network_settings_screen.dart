@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/apiUtils/dht_switch.dart';
 import 'package:retroshare/apiUtils/turtle_relay.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
@@ -17,6 +18,7 @@ class NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
   // Whether this node relays the other nodes' tunnels and searches; null
   // until read.
   bool? _relayOn;
+  bool? _dhtOn;
 
   @override
   void initState() {
@@ -31,7 +33,26 @@ class NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
         ?.locationId;
     if (locationId == null) return;
     final on = await turtleRelayOn(locationId);
-    if (mounted) setState(() => _relayOn = on);
+    final dht = await dhtOn(locationId);
+    if (mounted) {
+      setState(() {
+        _relayOn = on;
+        _dhtOn = dht;
+      });
+    }
+  }
+
+  /// Turns the DHT on or off, then shows the network state again.
+  Future<void> _setDht(bool on) async {
+    final auth = Provider.of<AccountCredentials>(context, listen: false);
+    final token = auth.authtoken;
+    final locationId = auth.loggedinAccount?.locationId;
+    if (token == null || locationId == null) return;
+    await setDhtOn(locationId, on);
+    await applyDht(token, locationId);
+    if (!mounted) return;
+    setState(() => _dhtOn = on);
+    _refreshDetails();
   }
 
   /// Turns the relay for the other nodes on or off. On asks first: it costs
@@ -385,6 +406,23 @@ class NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                         ),
                         value: _relayOn!,
                         onChanged: _setRelay,
+                      ),
+                    ),
+                  ],
+                  if (_dhtOn != null) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      margin: EdgeInsets.zero,
+                      child: SwitchListTile(
+                        secondary: const Icon(Icons.hub_rounded),
+                        title: const Text('Use the DHT'),
+                        subtitle: const Text(
+                          'Finds friends whose address changed. Off saves a '
+                          'lot of battery and mobile data; friends with a '
+                          'fixed address are reached either way.',
+                        ),
+                        value: _dhtOn!,
+                        onChanged: _setDht,
                       ),
                     ),
                   ],
