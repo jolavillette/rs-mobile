@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
+import 'package:retroshare/common/srgb_pixels.dart';
 import 'package:retroshare/common/upright_image.dart';
 
 /// The most pixels the desktop puts in a chat image (640 × 480, in
@@ -43,7 +44,8 @@ class ChatImage {
 /// it has transparent pixels and as JPEG (quality 85) otherwise, and, when
 /// there is a byte limit, made narrower until it fits. The desktop also cuts
 /// the colours down to 256 before narrowing; here only the size changes, so
-/// a photo keeps its colours. No EXIF data is kept.
+/// a photo keeps its colours. Its colours are turned into sRGB and it goes
+/// without colour profile nor EXIF data, which every viewer reads alike.
 ///
 /// Returns null when the bytes are no image this can read, or when even a
 /// tiny version does not fit the limit. Decoding a photo takes a while: run
@@ -56,43 +58,44 @@ ChatImage? prepareChatImage(ChatImageRequest request) {
     // Some decoders throw on bytes that are no image of theirs.
   }
   if (decoded == null) return null;
-  final image = uprightPixels(decoded);
-  final png = _hasTransparentPixels(image);
+  final upright = uprightPixels(decoded);
+  final png = _hasTransparentPixels(upright);
   final mimeType = png ? 'image/png' : 'image/jpeg';
   Uint8List encode(img.Image i) =>
       png ? img.encodePng(i) : img.encodeJpg(i, quality: 85);
-  img.Image narrowed(int width) => width >= image.width
-      ? image
+  bool fits(Uint8List bytes) =>
+      request.maxBytes <= 0 || bytes.length <= request.maxBytes;
+  img.Image narrow(img.Image from, int width) => width >= from.width
+      ? from
       : img.copyResize(
-          image,
+          from,
           width: width,
           interpolation: img.Interpolation.average,
         );
-  bool fits(Uint8List bytes) =>
-      request.maxBytes <= 0 || bytes.length <= request.maxBytes;
 
-  if (image.width * image.height <= chatImageMaxPixels) {
-    final whole = encode(image);
-    if (fits(whole)) return ChatImage(whole, mimeType);
-  }
-
-  final ratio = image.width / image.height;
+  // At most chatImageMaxPixels, in sRGB: what follows works on this.
+  final ratio = upright.width / upright.height;
   final maxWidth = math.max(
     1,
-    math.min(image.width, math.sqrt(chatImageMaxPixels * ratio).floor()),
+    math.min(upright.width, math.sqrt(chatImageMaxPixels * ratio).floor()),
   );
-  final largest = encode(narrowed(maxWidth));
+  final image = srgbPixels(
+    upright.width * upright.height <= chatImageMaxPixels
+        ? upright
+        : narrow(upright, maxWidth),
+  );
+  final largest = encode(image);
   if (fits(largest)) return ChatImage(largest, mimeType);
 
   // The widest version that fits, between one of about 100 pixels (the
   // desktop's smallest) and the largest above.
   var low = math.max(1, math.sqrt(100 * ratio).floor());
-  var best = encode(narrowed(low));
+  var best = encode(narrow(image, low));
   if (!fits(best)) return null;
-  var high = maxWidth;
+  var high = image.width;
   while (high - low > 1) {
     final middle = (low + high) ~/ 2;
-    final candidate = encode(narrowed(middle));
+    final candidate = encode(narrow(image, middle));
     if (fits(candidate)) {
       low = middle;
       best = candidate;
