@@ -47,7 +47,7 @@ class RoomScreenState extends State<RoomScreen>
   late final TabController _tabController;
   late Animation<Color?> _iconAnimation;
   BubbleStyle _bubbleStyle = BubbleStyle.bubble;
-  Timer? _statusRefreshTimer;
+  Timer? _refreshTimer;
   RoomChatLobby? _roomProvider;
   final GlobalKey<MessagesTabState> _messagesTabKey =
       GlobalKey<MessagesTabState>();
@@ -94,9 +94,15 @@ class RoomScreenState extends State<RoomScreen>
         final chatLobby = Provider.of<ChatLobby>(context, listen: false);
 
         if (widget.isRoom) {
-          if (widget.chat.chatId != null) {
-            chatLobby.resetUnreadCount(widget.chat.chatId!);
-          }
+          final lobbyId = widget.chat.chatId!;
+          chatLobby.resetUnreadCount(lobbyId);
+          unawaited(roomProvider.refreshRoomIdentity(lobbyId));
+          // The count in the header follows people joining and leaving
+          // while the room is open.
+          unawaited(roomProvider.refreshParticipantCount(lobbyId));
+          _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+            if (mounted) roomProvider.refreshParticipantCount(lobbyId);
+          });
         } else if (widget.chat.chatId != null) {
           // Trigger immediate status check for 1:1 chat
           await roomProvider.refreshDistantChatStatus(
@@ -105,7 +111,7 @@ class RoomScreenState extends State<RoomScreen>
           );
 
           // Start periodic refresh while chat is open
-          _statusRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+          _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
             if (mounted) {
               roomProvider.refreshDistantChatStatus(
                 widget.chat.chatId!,
@@ -131,7 +137,7 @@ class RoomScreenState extends State<RoomScreen>
 
   @override
   void dispose() {
-    _statusRefreshTimer?.cancel();
+    _refreshTimer?.cancel();
     _tabController.dispose();
     // Clear current chat so new messages are counted as unread
     _roomProvider?.clearCurrentChat(widget.chat.chatId);
@@ -259,6 +265,7 @@ class RoomScreenState extends State<RoomScreen>
       ),
     );
     if (picked == null || picked.mId == current || !mounted) return;
+    final roomProvider = Provider.of<RoomChatLobby>(context, listen: false);
     var changed = false;
     try {
       final response = await rsApiCall(
@@ -273,6 +280,7 @@ class RoomScreenState extends State<RoomScreen>
     } catch (e) {
       debugPrint('Cannot change the identity of room $lobbyId: $e');
     }
+    if (changed) roomProvider.setRoomIdentity(lobbyId, picked.mId);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -585,9 +593,9 @@ class RoomScreenState extends State<RoomScreen>
                   if (widget.isRoom)
                     Consumer<RoomChatLobby>(
                       builder: (context, lobby, _) {
-                        final count = lobby
-                                .lobbyParticipants[widget.chat.chatId]
-                                ?.length ??
+                        final lobbyId = widget.chat.chatId ?? '';
+                        final count = lobby.lobbyParticipantCount(lobbyId) ??
+                            lobby.lobbyParticipants[lobbyId]?.length ??
                             0;
                         return AnimatedBuilder(
                           animation: _tabController.animation!,
