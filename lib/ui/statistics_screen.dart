@@ -199,7 +199,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               'Service 0x${serviceId.toRadixString(16).padLeft(4, '0')}',
           receivedBytes: received,
           sentBytes: sent,
-          receivedRate: rate(received, last?.$1 ?? (seconds == null ? null : 0)),
+          receivedRate:
+              rate(received, last?.$1 ?? (seconds == null ? null : 0)),
           sentRate: rate(sent, last?.$2 ?? (seconds == null ? null : 0)),
         ),
       );
@@ -217,11 +218,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return [..._serviceTraffic]..sort((a, b) => key(b).compareTo(key(a)));
   }
 
+  // Speeds and amounts are measures: always two decimals, zero included.
+
   static String _formatRate(double kiloBytesPerSecond) {
     if (kiloBytesPerSecond >= 1024) {
-      return '${(kiloBytesPerSecond / 1024).toStringAsFixed(1)} MB/s';
+      return '${(kiloBytesPerSecond / 1024).toStringAsFixed(2)} MB/s';
     }
-    return '${kiloBytesPerSecond.toStringAsFixed(1)} kB/s';
+    return '${kiloBytesPerSecond.toStringAsFixed(2)} kB/s';
   }
 
   static String _formatBytes(double bytes) {
@@ -232,16 +235,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       value /= 1024;
       unit++;
     }
-    final digits = unit == 0 ? 0 : 1;
+    final digits = unit == 0 ? 0 : 2;
     return '${value.toStringAsFixed(digits)} ${units[unit]}';
   }
 
   /// A speed in the table: kB/s without the unit, '–' when not known yet.
-  static String _formatTableRate(double? kiloBytesPerSecond) {
-    if (kiloBytesPerSecond == null) return '–';
-    if (kiloBytesPerSecond >= 100) return kiloBytesPerSecond.toStringAsFixed(0);
-    return kiloBytesPerSecond.toStringAsFixed(1);
-  }
+  static String _formatTableRate(double? kiloBytesPerSecond) =>
+      kiloBytesPerSecond?.toStringAsFixed(2) ?? '–';
+
+  /// An amount in the table: MB without the unit, so that a column keeps
+  /// one unit.
+  static String _formatTableMegabytes(double bytes) =>
+      (bytes / (1024 * 1024)).toStringAsFixed(2);
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +275,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         onRefresh: _refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          // Down to above the system navigation bar.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            16 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             if (_loading)
               const Padding(
@@ -323,8 +334,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             const SizedBox(height: 12),
             Text(
               'Speeds over the last ${_refreshPeriod.inSeconds} seconds, in '
-              'kB/s; totals since RetroShare started on this phone. Tap a '
-              'column to sort by it.',
+              'kB/s; totals in MB since RetroShare started on this phone. '
+              'Tap a column to sort by it.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -355,17 +366,30 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final small = theme.textTheme.bodySmall;
     final dim = theme.colorScheme.onSurfaceVariant;
 
+    // A figure column: right-aligned, on one line, made smaller rather than
+    // wrapped when the text is large, and apart from its left neighbour.
+    Widget figure(Widget child) => Expanded(
+          flex: 3,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: child,
+            ),
+          ),
+        );
+
     Widget header(String text, _Column column, Color color) {
       final selected = _sortBy == column;
-      return Expanded(
-        flex: 2,
-        child: InkWell(
+      return figure(
+        InkWell(
           onTap: () => setState(() => _sortBy = column),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
               selected ? '$text ▾' : text,
-              textAlign: TextAlign.right,
+              maxLines: 1,
               style: small?.copyWith(
                 color: color,
                 fontWeight: selected ? FontWeight.bold : FontWeight.w500,
@@ -376,11 +400,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       );
     }
 
-    Widget cell(String text) => Expanded(
-          flex: 2,
-          child: Text(
+    Widget cell(String text) => figure(
+          Text(
             text,
-            textAlign: TextAlign.right,
+            maxLines: 1,
             style: small?.copyWith(
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -400,13 +423,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             Row(
               children: [
                 Expanded(
-                  flex: 4,
+                  flex: 6,
                   child: Text('Service', style: small?.copyWith(color: dim)),
                 ),
                 header('↓ kB/s', _Column.receivedRate, Colors.green),
                 header('↑ kB/s', _Column.sentRate, Colors.blue),
-                header('↓ total', _Column.received, Colors.green),
-                header('↑ total', _Column.sent, Colors.blue),
+                header('↓ MB', _Column.received, Colors.green),
+                header('↑ MB', _Column.sent, Colors.blue),
               ],
             ),
             const Divider(height: 1),
@@ -416,17 +439,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      flex: 4,
+                      flex: 6,
                       child: Text(
                         traffic.name,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: small?.copyWith(fontWeight: FontWeight.w600),
                       ),
                     ),
                     cell(_formatTableRate(traffic.receivedRate)),
                     cell(_formatTableRate(traffic.sentRate)),
-                    cell(_formatBytes(traffic.receivedBytes)),
-                    cell(_formatBytes(traffic.sentBytes)),
+                    cell(_formatTableMegabytes(traffic.receivedBytes)),
+                    cell(_formatTableMegabytes(traffic.sentBytes)),
                   ],
                 ),
               ),
