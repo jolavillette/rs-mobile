@@ -27,6 +27,10 @@ class RoomChatLobby with ChangeNotifier {
   // The identity used in each lobby, which may not be the active one.
   final Map<String, String> _roomIdentity = {};
 
+  /// The tunnel status of the distant chat [chatId], as the core gives it
+  /// (RS_DISTANT_CHAT_STATUS_*), or null before it was read.
+  int? distantChatStatus(String chatId) => _lastDistantChatStatus[chatId];
+
   /// How many identities are in the lobby [lobbyId], or null before it was
   /// read.
   int? lobbyParticipantCount(String lobbyId) =>
@@ -732,6 +736,7 @@ class RoomChatLobby with ChangeNotifier {
           }
         }
         _lastDistantChatStatus[distantId] = status;
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('Error in refreshDistantChatStatus: $e');
@@ -795,6 +800,7 @@ class RoomChatLobby with ChangeNotifier {
         _lastDistantChatStatus[distantId] = status;
       }
 
+      // addChatMessage() tells the listeners, the status with it.
       addChatMessage(msg, distantId);
     } catch (e) {
       debugPrint('Error in getDistanceChatStatus: $e');
