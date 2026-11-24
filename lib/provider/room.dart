@@ -21,6 +21,23 @@ class RoomChatLobby with ChangeNotifier {
   final Map<String, int> _lastDistantChatStatus = {};
   // Track chats that the user explicitly removed
   final Set<String> _hiddenDistantChats = {};
+  // How many identities each lobby has, read without their details so a
+  // room shows it from the start.
+  final Map<String, int> _lobbyParticipantCount = {};
+  // The identity used in each lobby, which may not be the active one.
+  final Map<String, String> _roomIdentity = {};
+
+  /// The tunnel status of the distant chat [chatId], as the core gives it
+  /// (RS_DISTANT_CHAT_STATUS_*), or null before it was read.
+  int? distantChatStatus(String chatId) => _lastDistantChatStatus[chatId];
+
+  /// How many identities are in the lobby [lobbyId], or null before it was
+  /// read.
+  int? lobbyParticipantCount(String lobbyId) =>
+      _lobbyParticipantCount[lobbyId];
+
+  /// The identity used in the lobby [lobbyId], or null before it was read.
+  String? roomIdentity(String lobbyId) => _roomIdentity[lobbyId];
 
   /// Returns a copy of the lobby participants map.
   Map<String, List<Identity>> get lobbyParticipants => {..._lobbyParticipants};
@@ -204,6 +221,7 @@ class RoomChatLobby with ChangeNotifier {
     try {
       final participants = <Identity>[];
       final gxsIds = await RsMsgs.getLobbyParticipants(lobbyId, _authToken);
+      _lobbyParticipantCount[lobbyId] = gxsIds.length as int;
 
       for (var i = 0; i < gxsIds.length; i++) {
         final key = gxsIds[i]?['key'] as String?;
@@ -235,6 +253,45 @@ class RoomChatLobby with ChangeNotifier {
       debugPrint('Error in updateParticipants for lobby $lobbyId: $e');
       rethrow;
     }
+  }
+
+  /// Reads how many identities are in the lobby [lobbyId], one call that
+  /// skips their details.
+  Future<void> refreshParticipantCount(String lobbyId) async {
+    try {
+      final gxsIds = await RsMsgs.getLobbyParticipants(lobbyId, _authToken);
+      final count = gxsIds is List ? gxsIds.length : 0;
+      if (_lobbyParticipantCount[lobbyId] == count) return;
+      _lobbyParticipantCount[lobbyId] = count;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Cannot count the participants of lobby $lobbyId: $e');
+    }
+  }
+
+  /// Reads the identity used in the lobby [lobbyId].
+  Future<void> refreshRoomIdentity(String lobbyId) async {
+    try {
+      final response = await rsApiCall(
+        '/rsChats/getIdentityForChatLobby',
+        authToken: _authToken,
+        params: {
+          'lobby_id': {'xstr64': lobbyId},
+        },
+      );
+      final nick = response['nick']?.toString();
+      if (response['retval'] == true && nick != null) {
+        setRoomIdentity(lobbyId, nick);
+      }
+    } catch (e) {
+      debugPrint('Cannot read the identity of lobby $lobbyId: $e');
+    }
+  }
+
+  void setRoomIdentity(String lobbyId, String gxsId) {
+    if (_roomIdentity[lobbyId] == gxsId) return;
+    _roomIdentity[lobbyId] = gxsId;
+    notifyListeners();
   }
 
   void updateCurrentChat(Chat? chat) {
@@ -679,6 +736,7 @@ class RoomChatLobby with ChangeNotifier {
           }
         }
         _lastDistantChatStatus[distantId] = status;
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('Error in refreshDistantChatStatus: $e');
@@ -742,6 +800,7 @@ class RoomChatLobby with ChangeNotifier {
         _lastDistantChatStatus[distantId] = status;
       }
 
+      // addChatMessage() tells the listeners, the status with it.
       addChatMessage(msg, distantId);
     } catch (e) {
       debugPrint('Error in getDistanceChatStatus: $e');

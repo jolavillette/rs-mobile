@@ -25,6 +25,7 @@ enum _ChatMenuAction {
   identity,
   invite,
   leave,
+  close,
 }
 
 class RoomScreen extends StatefulWidget {
@@ -47,7 +48,7 @@ class RoomScreenState extends State<RoomScreen>
   late final TabController _tabController;
   late Animation<Color?> _iconAnimation;
   BubbleStyle _bubbleStyle = BubbleStyle.bubble;
-  Timer? _statusRefreshTimer;
+  Timer? _refreshTimer;
   RoomChatLobby? _roomProvider;
   final GlobalKey<MessagesTabState> _messagesTabKey =
       GlobalKey<MessagesTabState>();
@@ -94,9 +95,15 @@ class RoomScreenState extends State<RoomScreen>
         final chatLobby = Provider.of<ChatLobby>(context, listen: false);
 
         if (widget.isRoom) {
-          if (widget.chat.chatId != null) {
-            chatLobby.resetUnreadCount(widget.chat.chatId!);
-          }
+          final lobbyId = widget.chat.chatId!;
+          chatLobby.resetUnreadCount(lobbyId);
+          unawaited(roomProvider.refreshRoomIdentity(lobbyId));
+          // The count in the header follows people joining and leaving
+          // while the room is open.
+          unawaited(roomProvider.refreshParticipantCount(lobbyId));
+          _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+            if (mounted) roomProvider.refreshParticipantCount(lobbyId);
+          });
         } else if (widget.chat.chatId != null) {
           // Trigger immediate status check for 1:1 chat
           await roomProvider.refreshDistantChatStatus(
@@ -105,7 +112,7 @@ class RoomScreenState extends State<RoomScreen>
           );
 
           // Start periodic refresh while chat is open
-          _statusRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+          _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
             if (mounted) {
               roomProvider.refreshDistantChatStatus(
                 widget.chat.chatId!,
@@ -131,7 +138,7 @@ class RoomScreenState extends State<RoomScreen>
 
   @override
   void dispose() {
-    _statusRefreshTimer?.cancel();
+    _refreshTimer?.cancel();
     _tabController.dispose();
     // Clear current chat so new messages are counted as unread
     _roomProvider?.clearCurrentChat(widget.chat.chatId);
@@ -150,18 +157,21 @@ class RoomScreenState extends State<RoomScreen>
     }
   }
 
-  Color _getStatusColor(int status) {
+  /// The LED and the words of the desktop's distant chat window for the
+  /// tunnel status [status] (RS_DISTANT_CHAT_STATUS_*).
+  static (Color, String) _tunnelState(int? status) {
     switch (status) {
-      case 3: // RS_STATUS_ONLINE
-        return Colors.lightGreenAccent;
-      case 1: // RS_STATUS_AWAY
-        return Colors.orange;
-      case 2: // RS_STATUS_BUSY
-        return Colors.red;
-      case 4: // RS_STATUS_INACTIVE
-        return Colors.orange;
+      case 2: // CAN_TALK
+        return (
+          Colors.green,
+          'End-to-end encrypted conversation established',
+        );
+      case 1: // TUNNEL_DN
+        return (Colors.amber, 'Tunnel is pending');
+      case 3: // REMOTELY_CLOSED
+        return (Colors.red, 'Your partner closed the conversation');
       default:
-        return Colors.grey;
+        return (Colors.grey, 'Remote status unknown');
     }
   }
 
@@ -259,6 +269,7 @@ class RoomScreenState extends State<RoomScreen>
       ),
     );
     if (picked == null || picked.mId == current || !mounted) return;
+    final roomProvider = Provider.of<RoomChatLobby>(context, listen: false);
     var changed = false;
     try {
       final response = await rsApiCall(
@@ -273,6 +284,7 @@ class RoomScreenState extends State<RoomScreen>
     } catch (e) {
       debugPrint('Cannot change the identity of room $lobbyId: $e');
     }
+    if (changed) roomProvider.setRoomIdentity(lobbyId, picked.mId);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -405,6 +417,45 @@ class RoomScreenState extends State<RoomScreen>
     }
   }
 
+  /// Ends this private chat as closing its window does on the desktop: the
+  /// tunnel closes, the chat leaves the list and its screen closes.
+  Future<void> _closeChat() async {
+    final chatId = widget.chat.chatId;
+    if (chatId == null) return;
+    final roomProvider = Provider.of<RoomChatLobby>(context, listen: false);
+    // Once the partner has closed it there is nothing left to end.
+    if (roomProvider.distantChatStatus(chatId) != 3) {
+      final close = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Close conversation?'),
+          content: const Text(
+            'Closing this chat ends the conversation. Unsent messages will '
+            'be dropped.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+      if (close != true || !mounted) return;
+    }
+    await roomProvider.removeDistantChat(chatId);
+    if (!mounted) return;
+    if (widget.onBack != null) {
+      widget.onBack!();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   Future<void> _handleMenuAction(_ChatMenuAction action) async {
     switch (action) {
       case _ChatMenuAction.search:
@@ -425,6 +476,9 @@ class RoomScreenState extends State<RoomScreen>
         return;
       case _ChatMenuAction.leave:
         await _leaveRoom();
+        return;
+      case _ChatMenuAction.close:
+        await _closeChat();
         return;
       case _ChatMenuAction.bubble:
       case _ChatMenuAction.compact:
@@ -450,29 +504,15 @@ class RoomScreenState extends State<RoomScreen>
     final avatarImage = _safeDecodeBase64(interlocutorIdentity?.avatar);
     final hasAvatar = avatarImage != null;
 
-    final friendLocations = Provider.of<FriendLocations>(context);
-    final friendLocs = friendLocations.friendlist;
-    final matchingLocs = interlocutorIdentity != null
-        ? PersonDelegateData.getMatchingLocations(
-            interlocutorIdentity, friendLocs)
-        : const Iterable<Location>.empty();
-
-    final isAnyLocationOnline = matchingLocs.any((loc) => loc.isOnline);
-
-    var effectiveStatus = interlocutorIdentity?.status ?? 0;
-    if (effectiveStatus == 0 && isAnyLocationOnline) {
-      effectiveStatus = 3; // Default to Online
-      for (final loc in matchingLocs) {
-        if (loc.isOnline && loc.status != 0 && loc.status != 3) {
-          effectiveStatus = loc.status;
-          break;
-        }
-      }
-    }
-
-    final showStatus = !widget.isRoom &&
-        interlocutorIdentity != null &&
-        (isAnyLocationOnline || effectiveStatus != 0);
+    // A private chat shows the state of its tunnel, as the desktop's LED.
+    final chatId = widget.chat.chatId;
+    final (tunnelColor, tunnelText) = _tunnelState(
+      widget.isRoom || chatId == null
+          ? null
+          : context.select<RoomChatLobby, int?>(
+              (lobby) => lobby.distantChatStatus(chatId),
+            ),
+    );
 
     final displayName = widget.isRoom
         ? widget.chat.chatName
@@ -538,10 +578,11 @@ class RoomScreenState extends State<RoomScreen>
                                   : null,
                             ),
                           ),
-                          if (showStatus)
-                            Positioned(
-                              bottom: 2,
-                              right: 2,
+                          Positioned(
+                            bottom: 2,
+                            right: 2,
+                            child: Tooltip(
+                              message: tunnelText,
                               child: Container(
                                 height: 14,
                                 width: 14,
@@ -551,13 +592,12 @@ class RoomScreenState extends State<RoomScreen>
                                         Theme.of(context).colorScheme.surface,
                                     width: 2,
                                   ),
-                                  color: effectiveStatus != 0
-                                      ? _getStatusColor(effectiveStatus)
-                                      : Colors.lightGreenAccent,
+                                  color: tunnelColor,
                                   shape: BoxShape.circle,
                                 ),
                               ),
                             ),
+                          ),
                         ],
                       ),
                     ),
@@ -573,10 +613,22 @@ class RoomScreenState extends State<RoomScreen>
                                 arguments: {'id': interlocutorIdentity},
                               );
                             },
-                      child: Text(
-                        displayName ?? 'Chat',
-                        style: Theme.of(context).textTheme.titleMedium,
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName ?? 'Chat',
+                            style: Theme.of(context).textTheme.titleMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (!widget.isRoom)
+                            Text(
+                              tunnelText,
+                              style: Theme.of(context).textTheme.bodySmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -585,9 +637,9 @@ class RoomScreenState extends State<RoomScreen>
                   if (widget.isRoom)
                     Consumer<RoomChatLobby>(
                       builder: (context, lobby, _) {
-                        final count = lobby
-                                .lobbyParticipants[widget.chat.chatId]
-                                ?.length ??
+                        final lobbyId = widget.chat.chatId ?? '';
+                        final count = lobby.lobbyParticipantCount(lobbyId) ??
+                            lobby.lobbyParticipants[lobbyId]?.length ??
                             0;
                         return AnimatedBuilder(
                           animation: _tabController.animation!,
@@ -678,6 +730,17 @@ class RoomScreenState extends State<RoomScreen>
                           value: _ChatMenuAction.compact,
                           child: Text('Bubble Compact'),
                         ),
+                      if (!widget.isRoom) ...[
+                        const PopupMenuDivider(),
+                        const PopupMenuItem<_ChatMenuAction>(
+                          value: _ChatMenuAction.close,
+                          child: ListTile(
+                            leading: Icon(Icons.close),
+                            title: Text('Close chat'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
