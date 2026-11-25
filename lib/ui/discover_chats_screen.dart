@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/identicon.dart';
@@ -20,6 +22,7 @@ class DiscoverChatsScreenState extends State<DiscoverChatsScreen> {
   String _searchQuery = '';
   _PublicChatSort _sort = _PublicChatSort.name;
   late final Future<void> _loadChats;
+  Timer? _refresh;
 
   List<VisibleChatLobbyRecord> _visibleChats(ChatLobby chats) {
     final query = _searchQuery.trim().toLowerCase();
@@ -46,10 +49,26 @@ class DiscoverChatsScreenState extends State<DiscoverChatsScreen> {
   @override
   void initState() {
     super.initState();
+    // The core keeps a room it is not in for a minute and asks its friends
+    // again when the list is read: reading it while the page is open keeps
+    // the rooms listed, and shows the ones that arrive.
+    _refresh = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      unawaited(
+        Provider.of<ChatLobby>(context, listen: false)
+            .fetchAndUpdateUnsubscribed(followUp: false),
+      );
+    });
     _loadChats = Future.microtask(
       () => Provider.of<ChatLobby>(context, listen: false)
           .fetchAndUpdateUnsubscribed(),
     );
+  }
+
+  @override
+  void dispose() {
+    _refresh?.cancel();
+    super.dispose();
   }
 
   Future<void> _goToChat(lobby) async {
