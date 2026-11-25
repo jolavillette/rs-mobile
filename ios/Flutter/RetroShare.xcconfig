@@ -1,0 +1,10 @@
+// Links the RetroShare core into Runner. ios/RetroShareCore/ is not tracked: it
+// holds the static core built from libretroshare (misc/iOS), one per platform,
+// and its C header.
+RS_CORE_DIR = $(SRCROOT)/RetroShareCore
+RS_CORE_SYSTEM_LIBS = -lz -lbz2 -lsqlite3 -lc++ -framework Security -framework CoreFoundation
+HEADER_SEARCH_PATHS = $(inherited) $(RS_CORE_DIR)/include
+OTHER_LDFLAGS[sdk=iphonesimulator*] = $(inherited) $(RS_CORE_DIR)/simulator/libretroshare-core.a $(RS_CORE_SYSTEM_LIBS)
+OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) $(RS_CORE_DIR)/device/libretroshare-core.a $(RS_CORE_SYSTEM_LIBS)
+// The core is built for arm64 only: no simulator on Intel Macs.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = i386 x86_64
