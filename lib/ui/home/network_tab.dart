@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/rs_tokens.dart';
@@ -74,7 +76,52 @@ class NetworkTab extends StatefulWidget {
 
 enum _View { network, chats }
 
-class _NetworkTabState extends State<NetworkTab> {
+class _NetworkTabState extends State<NetworkTab>
+    with WidgetsBindingObserver {
+  /// The friend list is read again at this pace while the app is on screen:
+  /// connections, disconnections and names that arrive after the first
+  /// connection show up without leaving the page.
+  static const _refreshPeriod = Duration(seconds: 15);
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startRefresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshFriends();
+      _startRefresh();
+    } else {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    }
+  }
+
+  void _startRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(_refreshPeriod, (_) => _refreshFriends());
+  }
+
+  void _refreshFriends() {
+    if (!mounted) return;
+    unawaited(
+      Provider.of<FriendLocations>(context, listen: false)
+          .fetchfriendLocation(),
+    );
+  }
+
   _View _view = _View.network;
   String _search = '';
 
