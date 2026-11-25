@@ -160,7 +160,7 @@ class _MobileServicesSettingsScreenState
                         _coreServices[type]!.isEmpty
                             ? 'Service 0x${type.toRadixString(16).padLeft(4, '0')}'
                             : _coreServices[type]!,
-                        'Not handled by the app.',
+                        'Runs in the core. The app has no page or setting for it.',
                         type,
                       ),
                   ]),

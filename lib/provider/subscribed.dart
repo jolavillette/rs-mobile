@@ -88,9 +88,21 @@ class ChatLobby with ChangeNotifier {
     unawaited(checkForNewInvites());
   }
 
-  Future<void> fetchAndUpdateUnsubscribed() async {
+  Timer? _unsubscribedFollowUp;
+
+  /// The core forgets the rooms it is not in after a minute and asks its
+  /// friends for them again when read: a first read can come back empty and
+  /// the answers arrive a moment later, so the list is read again shortly.
+  Future<void> fetchAndUpdateUnsubscribed({bool followUp = true}) async {
     _unsubscribedlist = await RsMsgs.getUnsubscribedChatLobbies(authToken);
     notifyListeners();
+    if (!followUp) return;
+    _unsubscribedFollowUp?.cancel();
+    var reads = 0;
+    _unsubscribedFollowUp = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (++reads >= 3) timer.cancel();
+      unawaited(fetchAndUpdateUnsubscribed(followUp: false));
+    });
   }
 
   /// Makes a newly joined room visible immediately, then reconciles with the

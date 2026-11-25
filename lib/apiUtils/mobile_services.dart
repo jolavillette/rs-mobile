@@ -22,6 +22,11 @@ class MobileService {
 /// Services shows them, it does not let the user turn them off.
 const neededServices = <MobileService>[
   MobileService(
+    RsServiceTypes.mobileLink,
+    'Mobile link',
+    'Lets the friends that serve this phone spare its battery and data.',
+  ),
+  MobileService(
     RsServiceTypes.serviceInfo,
     'Service info',
     'Tells friends which services this node runs.',
