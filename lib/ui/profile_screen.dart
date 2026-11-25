@@ -66,7 +66,7 @@ class ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 children: [
                   _infoTile(context, 'Name', widget.curr.name ?? 'Unknown', Icons.person),
-                  _infoTile(context, 'Identity ID (mId)', widget.curr.mId, Icons.fingerprint),
+                  _infoTile(context, 'GXS ID', widget.curr.mId, Icons.fingerprint),
                   if (widget.curr.pgpId != null && widget.curr.pgpId != '0000000000000000')
                     _infoTile(context, 'PGP ID', widget.curr.pgpId!, Icons.security),
                   _infoTile(

@@ -131,6 +131,7 @@ class SettingsScreenState extends State<SettingsScreen> {
     final theme = Theme.of(context);
     final identitiesProvider = Provider.of<Identities>(context);
     final currentId = identitiesProvider.currentIdentity;
+    final account = Provider.of<AccountCredentials>(context).loggedinAccount;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -226,11 +227,15 @@ class SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
+                        // The desktop's title: profile name (node name).
                         Text(
-                          currentId.name ?? 'Unknown Identity',
+                          account == null
+                              ? 'RetroShare'
+                              : '${account.pgpName} (${account.locationName})',
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
+                          textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 6),
                         Padding(
@@ -278,30 +283,6 @@ class SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: currentId.signed
-                                ? Colors.teal.withAlpha(26)
-                                : Colors.orange.withAlpha(26),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            currentId.signed
-                                ? 'Signed Identity'
-                                : 'Pseudonymous Identity',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: currentId.signed
-                                  ? Colors.teal
-                                  : Colors.orange,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -329,13 +310,9 @@ class SettingsScreenState extends State<SettingsScreen> {
                             icon: Icons.person_rounded,
                             iconBgColor: Colors.blue,
                             title: 'Node',
-                            subtitle: 'PGP ID, mId, profile details',
+                            subtitle: 'Profile, this node, RetroShare ID',
                             onTap: () {
-                              Navigator.pushNamed(
-                                context,
-                                '/profile',
-                                arguments: {'id': currentId},
-                              );
+                              Navigator.pushNamed(context, '/node');
                             },
                           ),
                           _divider(theme),
