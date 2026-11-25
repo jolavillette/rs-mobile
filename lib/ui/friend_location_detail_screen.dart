@@ -29,6 +29,10 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
   String _retroshareId = '';
   bool _connecting = false;
 
+  /// Short: small and easy to scan. Long: the whole certificate, with the
+  /// friend's PGP key.
+  bool _longFormat = false;
+
   Future<void> _openChat() async {
     final peerId = widget.location.rsPeerId;
     if (peerId.isEmpty) return;
@@ -77,15 +81,25 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
         debugPrint('Error fetching peer version: $e');
       }
       try {
-        final res = await rsApiCall(
-          '/rsPeers/GetShortInvite',
-          authToken: authToken,
-          params: {'sslId': peerId},
-        );
-        final invite = res['invite']?.toString() ?? '';
-        // The core answers with a link; the ID is its rsInvite parameter.
-        final key = Uri.tryParse(invite)?.queryParameters['rsInvite'];
-        retroshareId = key != null ? Uri.decodeComponent(key) : invite;
+        if (_longFormat) {
+          final res = await rsApiCall(
+            '/rsPeers/GetRetroshareInvite',
+            authToken: authToken,
+            params: {'sslId': peerId},
+          );
+          retroshareId =
+              (res['retval']?.toString() ?? '').replaceAll('\n', '');
+        } else {
+          final res = await rsApiCall(
+            '/rsPeers/GetShortInvite',
+            authToken: authToken,
+            params: {'sslId': peerId},
+          );
+          final invite = res['invite']?.toString() ?? '';
+          // The core answers with a link; the ID is its rsInvite parameter.
+          final key = Uri.tryParse(invite)?.queryParameters['rsInvite'];
+          retroshareId = key != null ? Uri.decodeComponent(key) : invite;
+        }
       } catch (e) {
         debugPrint('Error fetching the RetroShare ID: $e');
       }
@@ -193,6 +207,12 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
     return state >= 4 || (_det.isEmpty && widget.location.isOnline);
   }
 
+  void _setFormat(bool long) {
+    if (long == _longFormat) return;
+    setState(() => _longFormat = long);
+    _fetchPeerDetails();
+  }
+
   void _showRetroshareIdQr() {
     showDialog<void>(
       context: context,
@@ -203,8 +223,8 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
               : 'RetroShare ID',
         ),
         content: SizedBox(
-          width: 260,
-          height: 260,
+          width: 280,
+          height: 280,
           child: Container(
             color: Colors.white,
             padding: const EdgeInsets.all(8),
@@ -633,13 +653,22 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                       ),
                   ],
                   if (!_isLoading) _knownAddressesTile(context),
-                  if (_retroshareId.isNotEmpty) ...[
+                  if (_retroshareId.isNotEmpty || _longFormat) ...[
                     const SizedBox(height: 12),
                     _sectionTitle(context, 'RetroShare ID'),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Short')),
+                        ButtonSegment(value: true, label: Text('Long')),
+                      ],
+                      selected: {_longFormat},
+                      onSelectionChanged: (s) => _setFormat(s.first),
+                    ),
+                    const SizedBox(height: 10),
                     _infoTile(
                       context,
                       'Give it to another node to add this one as a friend',
-                      _retroshareId,
+                      _retroshareId.isEmpty ? 'Not available' : _retroshareId,
                       Icons.badge_outlined,
                       maxLines: 6,
                     ),
