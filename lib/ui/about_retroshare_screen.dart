@@ -23,6 +23,10 @@ class _AboutRetroShareScreenState extends State<AboutRetroShareScreen> {
   static const _wrapperGit = String.fromEnvironment('RS_WRAPPER_GIT');
   static const _libGit = String.fromEnvironment('RS_LIB_GIT');
 
+  // The build's own name, as in the file name of the package:
+  // <date>-<app commits>-g<app commit>-lib-<lib commits>-g<lib commit>.
+  static const _build = String.fromEnvironment('RS_VERSION');
+
   /// (name, version) rows, in display order.
   List<(String, String)> _versions = [];
   List<(String, String)>? _libraries;
@@ -66,6 +70,7 @@ class _AboutRetroShareScreenState extends State<AboutRetroShareScreen> {
     if (!mounted) return;
     setState(() {
       _versions = [
+        if (_build.isNotEmpty) ('Build', _build),
         (
           'RetroShare Mobile',
           '${package.version} (build ${package.buildNumber})'
