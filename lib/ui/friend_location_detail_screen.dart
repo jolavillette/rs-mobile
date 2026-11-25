@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:share_plus/share_plus.dart';
 
 class FriendLocationDetailScreen extends StatefulWidget {
   const FriendLocationDetailScreen({super.key, required this.location});
@@ -20,6 +22,11 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
   /// until loaded, or when the core does not know the node.
   Map<String, dynamic> _det = const {};
   String _version = '';
+
+  /// The node's RetroShare ID (short invite): what another node pastes or
+  /// scans to add it as a friend.
+  String _retroshareId = '';
+  bool _connecting = false;
 
   Future<void> _openChat() async {
     final peerId = widget.location.rsPeerId;
@@ -44,6 +51,7 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
     final peerId = widget.location.rsPeerId;
     var det = const <String, dynamic>{};
     var version = '';
+    var retroshareId = '';
     if (authToken != null && peerId.isNotEmpty) {
       try {
         final res = await rsApiCall(
@@ -67,13 +75,85 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
       } catch (e) {
         debugPrint('Error fetching peer version: $e');
       }
+      try {
+        final res = await rsApiCall(
+          '/rsPeers/GetShortInvite',
+          authToken: authToken,
+          params: {'sslId': peerId},
+        );
+        final invite = res['invite']?.toString() ?? '';
+        // The core answers with a link; the ID is its rsInvite parameter.
+        final key = Uri.tryParse(invite)?.queryParameters['rsInvite'];
+        retroshareId = key != null ? Uri.decodeComponent(key) : invite;
+      } catch (e) {
+        debugPrint('Error fetching the RetroShare ID: $e');
+      }
     }
     if (!mounted) return;
     setState(() {
       _det = det;
       _version = version;
+      _retroshareId = retroshareId;
       _isLoading = false;
     });
+  }
+
+  /// The desktop's "Attempt to connect": asks the core to dial the node now,
+  /// then reads its state again while the attempt runs.
+  Future<void> _attemptToConnect() async {
+    final authToken =
+        Provider.of<AccountCredentials>(context, listen: false).authtoken;
+    final peerId = widget.location.rsPeerId;
+    if (authToken == null || peerId.isEmpty || _connecting) return;
+    setState(() => _connecting = true);
+    try {
+      await rsApiCall(
+        '/rsPeers/connectAttempt',
+        authToken: authToken,
+        params: {'sslId': peerId},
+      );
+    } catch (e) {
+      debugPrint('Error asking for a connection attempt: $e');
+    }
+    for (final wait in const [2, 4, 6]) {
+      await Future<void>.delayed(Duration(seconds: wait));
+      if (!mounted) return;
+      await _fetchPeerDetails();
+    }
+    if (mounted) setState(() => _connecting = false);
+  }
+
+  bool get _connected {
+    final state = _int('connectState');
+    return state >= 4 || (_det.isEmpty && widget.location.isOnline);
+  }
+
+  void _showRetroshareIdQr() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          widget.location.locationName.isNotEmpty
+              ? widget.location.locationName
+              : 'RetroShare ID',
+        ),
+        content: SizedBox(
+          width: 260,
+          height: 260,
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(8),
+            child: QrImageView(data: _retroshareId),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _str(String key) => _det[key]?.toString() ?? '';
@@ -360,6 +440,20 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                   ),
                 ),
               ),
+            if (!isValidationPending && !_isLoading && !_connected)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _connecting ? null : _attemptToConnect,
+                    icon: const Icon(Icons.link),
+                    label: Text(
+                      _connecting ? 'Trying to connect...' : 'Attempt to connect',
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(height: 20),
 
             // --- Node info, as the desktop's node details ---
@@ -472,6 +566,37 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                       ),
                   ],
                   if (!_isLoading) _knownAddressesTile(context),
+                  if (_retroshareId.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _sectionTitle(context, 'RetroShare ID'),
+                    _infoTile(
+                      context,
+                      'Give it to another node to add this one as a friend',
+                      _retroshareId,
+                      Icons.badge_outlined,
+                      maxLines: 6,
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => SharePlus.instance
+                                .share(ShareParams(text: _retroshareId)),
+                            icon: const Icon(Icons.share),
+                            label: const Text('Share'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _showRetroshareIdQr,
+                            icon: const Icon(Icons.qr_code),
+                            label: const Text('QR code'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
