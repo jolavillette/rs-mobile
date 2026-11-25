@@ -413,7 +413,9 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: SingleChildScrollView(
+      // SafeArea: the last buttons stay above Android's navigation bar.
+      body: SafeArea(
+        child: SingleChildScrollView(
         child: Column(
           children: [
             const SizedBox(height: 20),
@@ -699,6 +701,7 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
             ),
             const SizedBox(height: 30),
           ],
+        ),
         ),
       ),
     );
