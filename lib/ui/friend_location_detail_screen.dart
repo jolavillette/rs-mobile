@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:retroshare/provider/auth.dart';
+import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -121,6 +122,70 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
       await _fetchPeerDetails();
     }
     if (mounted) setState(() => _connecting = false);
+  }
+
+  /// Removes this node only, or the friend with all their nodes, as the
+  /// desktop's "Remove Friend Node" and "Remove Friend". Asks first.
+  Future<void> _remove({required bool wholeFriend}) async {
+    final authToken =
+        Provider.of<AccountCredentials>(context, listen: false).authtoken;
+    final friends = Provider.of<FriendLocations>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final name = widget.location.accountName.isNotEmpty
+        ? widget.location.accountName
+        : 'this friend';
+    final node = widget.location.locationName.isNotEmpty
+        ? widget.location.locationName
+        : 'this node';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(wholeFriend ? 'Remove friend' : 'Remove node'),
+        content: Text(
+          wholeFriend
+              ? 'Remove $name and all their nodes from your friends? '
+                  'You will need their RetroShare ID to add them again.'
+              : 'Remove the node "$node" of $name? Their other nodes stay.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || authToken == null) return;
+    var removed = false;
+    try {
+      final res = wholeFriend
+          ? await rsApiCall(
+              '/rsPeers/removeFriend',
+              authToken: authToken,
+              params: {'pgpId': widget.location.rsGpgId},
+            )
+          : await rsApiCall(
+              '/rsPeers/removeFriendLocation',
+              authToken: authToken,
+              params: {'sslId': widget.location.rsPeerId},
+            );
+      removed = res['retval'] == true;
+    } catch (e) {
+      debugPrint('Error removing a friend: $e');
+    }
+    if (!removed) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not remove it.')),
+      );
+      return;
+    }
+    await friends.fetchfriendLocation();
+    navigator.pop();
   }
 
   bool get _connected {
@@ -597,6 +662,38 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                       ],
                     ),
                   ],
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: widget.location.rsPeerId.isEmpty
+                          ? null
+                          : () => _remove(wholeFriend: false),
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Remove node'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: widget.location.rsGpgId.isEmpty
+                          ? null
+                          : () => _remove(wholeFriend: true),
+                      icon: const Icon(Icons.person_remove_outlined),
+                      label: const Text('Remove friend'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
