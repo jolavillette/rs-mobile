@@ -13,6 +13,7 @@ import 'package:retroshare/provider/subscribed.dart';
 import 'package:retroshare/ui/room/message_delegate.dart';
 import 'package:retroshare/ui/room/messages_tab.dart';
 import 'package:retroshare/ui/room/room_friends_tab.dart';
+import 'package:retroshare/ui/room/room_notifications.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,6 +24,7 @@ enum _ChatMenuAction {
   compact,
   participants,
   identity,
+  notifications,
   invite,
   leave,
   close,
@@ -471,6 +473,10 @@ class RoomScreenState extends State<RoomScreen>
       case _ChatMenuAction.identity:
         await _chooseRoomIdentity();
         return;
+      case _ChatMenuAction.notifications:
+        final lobbyId = widget.chat.chatId;
+        if (lobbyId != null) await chooseRoomNotifications(context, lobbyId);
+        return;
       case _ChatMenuAction.invite:
         await _inviteFriends();
         return;
@@ -702,6 +708,15 @@ class RoomScreenState extends State<RoomScreen>
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
+                        if (roomNotificationsAvailable)
+                          const PopupMenuItem<_ChatMenuAction>(
+                            value: _ChatMenuAction.notifications,
+                            child: ListTile(
+                              leading: Icon(Icons.notifications_outlined),
+                              title: Text('Notifications'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
                         const PopupMenuItem<_ChatMenuAction>(
                           value: _ChatMenuAction.invite,
                           child: ListTile(
