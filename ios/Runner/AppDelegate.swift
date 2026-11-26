@@ -87,6 +87,9 @@ import UIKit
       }
     case "isRunning":
       result(rs_ios_is_running() != 0)
+    case "jsonApiPort":
+      // The interface asks where this application's core listens.
+      result(Int(AppDelegate.jsonApiPort))
     case "secretSet":
       let arguments = call.arguments as? [String: Any]
       if let name = arguments?["name"] as? String, let value = arguments?["value"] as? String {
