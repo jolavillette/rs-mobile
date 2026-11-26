@@ -29,6 +29,7 @@ class RetroShareServiceAndroid : RsService() {
         private const val DEFAULT_KEEP_ALIVE_SECONDS = 240
         private const val KEEP_ALIVE_TIMEOUT_SECONDS = 10
         private const val KEEP_ALIVE_WAKE_MS = 15_000L
+        private const val AFTER_KEEP_ALIVE_WAKE_MS = 3_000L
         private const val INCOMING_WAKE_MS = 5_000L
 
         private val JSON_API_PORT_KEY = RsService::class.java.canonicalName + "/JSON_API_PORT_KEY"
@@ -170,12 +171,15 @@ class RetroShareServiceAndroid : RsService() {
     private val keepAliveReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val pending = goAsync()
-            shortWakeLock.acquire(KEEP_ALIVE_WAKE_MS)
+            stayAwake(KEEP_ALIVE_WAKE_MS)
             // The keep-alive waits for the home's answer: off the main thread.
             Thread {
                 try {
                     RsService.nativeMobileLinkKeepAlive(KEEP_ALIVE_TIMEOUT_SECONDS)
                     if (sleepAllowed) scheduleKeepAlive()
+                    // The home answered or the wait ended: the phone goes
+                    // back to sleep at once, except for an item being handled.
+                    stayAwake(AFTER_KEEP_ALIVE_WAKE_MS, replace = true)
                 } finally {
                     pending.finish()
                 }
@@ -205,7 +209,26 @@ class RetroShareServiceAndroid : RsService() {
     }
 
     override fun onMobileLinkWakeUp() {
-        shortWakeLock.acquire(INCOMING_WAKE_MS)
+        synchronized(shortWakeLock) {
+            incomingAwakeUntil = SystemClock.elapsedRealtime() + INCOMING_WAKE_MS
+        }
+        stayAwake(INCOMING_WAKE_MS)
+    }
+
+    // End of the time an arrived item asked for, on the elapsedRealtime clock.
+    private var incomingAwakeUntil = 0L
+    private var awakeUntil = 0L
+
+    // Keeps the phone awake for the given time. A new call never shortens
+    // the time already asked for, unless replace is set: then only what an
+    // arrived item asked for is kept.
+    private fun stayAwake(ms: Long, replace: Boolean = false) {
+        synchronized(shortWakeLock) {
+            val now = SystemClock.elapsedRealtime()
+            val floor = if (replace) incomingAwakeUntil else awakeUntil
+            awakeUntil = maxOf(floor, now + ms)
+            shortWakeLock.acquire(awakeUntil - now)
+        }
     }
 
     private fun keepAliveIntent(): PendingIntent = PendingIntent.getBroadcast(
