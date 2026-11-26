@@ -1,4 +1,5 @@
 import Flutter
+import Security
 import UIKit
 
 @main
@@ -110,6 +111,19 @@ import UIKit
       result(rs_ios_is_running() != 0)
     case "pushRegistration":
       result(AppDelegate.pushRegistration())
+    case "secretSet":
+      let arguments = call.arguments as? [String: Any]
+      if let name = arguments?["name"] as? String, let value = arguments?["value"] as? String {
+        result(SecretStore.set(name, value))
+      } else {
+        result(false)
+      }
+    case "secretGet":
+      let name = (call.arguments as? [String: Any])?["name"] as? String
+      result(name.flatMap { SecretStore.get($0) })
+    case "secretDelete":
+      let name = (call.arguments as? [String: Any])?["name"] as? String
+      result(name.map { SecretStore.delete($0) } ?? false)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -146,5 +160,44 @@ import UIKit
       return -1
     }
     return rs_ios_start(baseDir.path, jsonApiPort, jsonApiBindAddress)
+  }
+}
+
+/// Small secrets of the application, kept in the keychain: readable only while
+/// the device is unlocked, never copied to another device or to a backup.
+enum SecretStore {
+  private static let service = "cc.retroshare.retroshare"
+
+  private static func query(_ name: String) -> [String: Any] {
+    return [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: name,
+    ]
+  }
+
+  static func set(_ name: String, _ value: String) -> Bool {
+    delete(name)
+    var item = query(name)
+    item[kSecValueData as String] = Data(value.utf8)
+    item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+    return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+  }
+
+  static func get(_ name: String) -> String? {
+    var search = query(name)
+    search[kSecReturnData as String] = true
+    search[kSecMatchLimit as String] = kSecMatchLimitOne
+    var found: CFTypeRef?
+    guard SecItemCopyMatching(search as CFDictionary, &found) == errSecSuccess,
+      let data = found as? Data
+    else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
+  @discardableResult
+  static func delete(_ name: String) -> Bool {
+    let status = SecItemDelete(query(name) as CFDictionary)
+    return status == errSecSuccess || status == errSecItemNotFound
   }
 }
