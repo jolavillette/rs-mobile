@@ -4,12 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:oktoast/oktoast.dart';
 import 'package:provider/provider.dart';
-import 'package:retroshare/apiUtils/stay_logged_in.dart';
 import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:retroshare/common/rs_tokens.dart';
+import 'package:retroshare/apiUtils/stay_logged_in.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -21,14 +21,14 @@ class SignInScreen extends StatefulWidget {
 class SignInScreenState extends State<SignInScreen> {
   TextEditingController passwordController = TextEditingController();
 
+  /// Whether the password is kept on this device after a login.
+  bool stayLoggedIn = false;
+  bool _storedLoginTried = false;
+
   late List<DropdownMenuItem<Account>> accountsDropdown;
   late Account? currentAccount;
   late bool hideLocations;
   late bool wrongPassword;
-
-  /// Whether the password is kept on this device after a login.
-  bool stayLoggedIn = false;
-  bool _storedLoginTried = false;
 
   @override
   void initState() {
