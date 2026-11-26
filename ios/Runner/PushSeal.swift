@@ -11,6 +11,7 @@ import Foundation
 ///   from    who wrote it (optional)
 ///   text    the text to show
 ///   thread  an identifier grouping notifications, e.g. the lobby id (optional)
+///   count   how many lines of that thread the phone has not seen (optional)
 enum PushSeal {
   static let appGroup = "group.cc.retroshare.retroshare"
   static let payloadField = "rs"
@@ -22,6 +23,7 @@ enum PushSeal {
     let from: String?
     let text: String
     let thread: String?
+    let count: Int?
   }
 
   private static var store: UserDefaults? { UserDefaults(suiteName: appGroup) }

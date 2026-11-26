@@ -22,6 +22,7 @@ class NotificationService: UNNotificationServiceExtension {
       let message = PushSeal.open(sealed)
     {
       content.title = message.title
+      if let count = message.count, count > 1 { content.title += " (\(count))" }
       if let from = message.from { content.subtitle = from }
       content.body = message.text
       if let thread = message.thread { content.threadIdentifier = thread }
