@@ -85,6 +85,14 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
       } catch (e) {
         debugPrint('Error fetching peer details: $e');
       }
+      // The state first: the buttons depend on it, and must not wait for
+      // the version and the RetroShare ID, which may take long or never
+      // come for a node that is away.
+      if (!mounted) return;
+      setState(() {
+        _det = det;
+        _isLoading = false;
+      });
       try {
         final res = await rsApiCall(
           '/rsGossipDiscovery/getPeerVersion',
@@ -549,7 +557,7 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     // Greyed once connected, and while an attempt runs.
-                    onPressed: _connecting || _connected || _isLoading
+                    onPressed: _connecting || _connected
                         ? null
                         : _attemptToConnect,
                     icon: const Icon(Icons.link),
