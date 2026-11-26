@@ -377,8 +377,26 @@ class RoomChatLobby with ChangeNotifier {
     }
 
     final currentList = _messagesList[chatId] ?? [];
+
+    // In the order the messages were sent: the lines a home kept for the
+    // phone arrive after later ones that came at once. A message without a
+    // send time goes last, and one never moves before such a message.
+    final sent = message.sendTime ?? 0;
+    var at = currentList.length;
+    if (sent > 0) {
+      while (at > 0) {
+        final before = currentList[at - 1].sendTime ?? 0;
+        if (before <= sent) break;
+        at--;
+      }
+    }
+
     _messagesList = Map.from(_messagesList)
-      ..[chatId] = [...currentList, message];
+      ..[chatId] = [
+        ...currentList.sublist(0, at),
+        message,
+        ...currentList.sublist(at),
+      ];
     notifyListeners();
   }
 
