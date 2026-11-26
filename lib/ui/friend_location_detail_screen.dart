@@ -555,7 +555,9 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                 child: SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton.icon(
+                  // Filled, as Send message: an outlined button that is
+                  // active looked greyed, and whiter once disabled.
+                  child: FilledButton.icon(
                     // Greyed once connected, and while an attempt runs.
                     onPressed: _connecting || _connected
                         ? null
