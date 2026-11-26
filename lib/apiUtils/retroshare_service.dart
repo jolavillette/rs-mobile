@@ -10,13 +10,34 @@ void setControlCallbacks() {
   rs.setStartCallback(RsServiceControl.startRetroshare);
 }
 
+bool _coreAddressApplied = false;
+
+/// Points the interface at this application's own core. On a phone the
+/// platform side knows the port ("jsonApiPort"); a platform that does not
+/// answer keeps the wrapper's default. Done once, before the first call to
+/// the core: two applications built from this code would otherwise reach
+/// whichever core holds the default port.
+Future<void> applyCoreAddress() async {
+  if (_coreAddressApplied) return;
+  _coreAddressApplied = true;
+  if (!Platform.isAndroid && !Platform.isIOS) return;
+  try {
+    final port = await rsPlatform.invokeMethod<int>('jsonApiPort');
+    if (port != null && port > 0) {
+      rs.setRetroshareServicePrefix('http://${rs.RETROSHARE_HOST}:$port');
+    }
+  } catch (_) {
+    // No such call on this platform side: the default port stands.
+  }
+}
+
 // The wrapper's isRetroshareRunning() only accepts 2xx responses, but the RS
 // JSON API root returns a non-2xx status. Accept any HTTP response as proof
 // the service is up.
 Future<bool> _isRsApiReachable() async {
   try {
     await http
-        .get(Uri.parse('http://${rs.RETROSHARE_HOST}:${rs.RETROSHARE_PORT}'))
+        .get(Uri.parse(rs.getRetroshareServicePrefix()))
         .timeout(const Duration(seconds: 3));
     return true;
   } catch (_) {
@@ -36,6 +57,8 @@ class RsServiceControl {
   }
 
   static Future<bool> _doStartRetroshare() async {
+    await applyCoreAddress();
+
     try {
       if (await _isRsApiReachable()) return true;
     } catch (_) {}

@@ -28,7 +28,7 @@ class RetroShareServiceAndroid : RsService() {
 
         fun start(
             ctx: Context,
-            jsonApiPort: Int = DEFAULT_JSON_API_PORT,
+            jsonApiPort: Int = CorePort.JSON_API,
             jsonApiBindAddress: String = DEFAULT_JSON_API_BINDING_ADDRESS,
         ) {
             val intent = Intent(ctx, RetroShareServiceAndroid::class.java)

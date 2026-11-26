@@ -50,6 +50,8 @@ class MainActivity : FlutterActivity() {
                     RetroShareServiceAndroid.stop(applicationContext)
                     result.success(true)
                 }
+                // The port this application's core listens on.
+                "jsonApiPort" -> result.success(CorePort.JSON_API)
                 "restart" -> {
                     try {
                         RetroShareServiceAndroid.stop(applicationContext)
