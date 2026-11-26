@@ -6,6 +6,7 @@ import UIKit
   private static let channelName = "cc.retroshare.retroshare/retroshare"
   private static let jsonApiPort: Int32 = 9092
   private static let jsonApiBindAddress = "127.0.0.1"
+  private static let quietHandoverSeconds = 5.0
 
   private var rsChannel: FlutterMethodChannel?
   // The core starts and stops on its own queue: both calls block for seconds.
@@ -26,7 +27,27 @@ import UIKit
       rsChannel = channel
     }
 
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(holdBackgroundTime),
+      name: UIApplication.didEnterBackgroundNotification, object: nil)
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  /// iOS suspends the process right after it leaves the screen. The application
+  /// then tells the core to go quiet, and the core needs a few seconds to pass
+  /// that on to its home nodes: ask the system for that time.
+  @objc private func holdBackgroundTime() {
+    let application = UIApplication.shared
+    var task = UIBackgroundTaskIdentifier.invalid
+    let finish = {
+      if task != .invalid {
+        application.endBackgroundTask(task)
+        task = .invalid
+      }
+    }
+    task = application.beginBackgroundTask(withName: "RetroShare going quiet", expirationHandler: finish)
+    DispatchQueue.main.asyncAfter(deadline: .now() + AppDelegate.quietHandoverSeconds, execute: finish)
   }
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
