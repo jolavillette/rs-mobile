@@ -535,11 +535,8 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    // Greyed while the node is not connected: a message
-                    // would not leave.
-                    onPressed: widget.location.rsPeerId.isEmpty || !_connected
-                        ? null
-                        : _openChat,
+                    onPressed:
+                        widget.location.rsPeerId.isEmpty ? null : _openChat,
                     icon: const Icon(Icons.message_outlined),
                     label: const Text('Send message'),
                   ),
