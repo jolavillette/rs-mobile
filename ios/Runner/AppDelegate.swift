@@ -114,11 +114,22 @@ import UIKit
     guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
       return -1
     }
-    let baseDir = support.appendingPathComponent("retroshare", isDirectory: true)
+    var baseDir = support.appendingPathComponent("retroshare", isDirectory: true)
     do {
       try fm.createDirectory(at: baseDir, withIntermediateDirectories: true)
     } catch {
       NSLog("RetroShare: cannot create %@: %@", baseDir.path, error.localizedDescription)
+      return -1
+    }
+    // Keys, identities and databases stay on this device: the directory, and
+    // so everything below it, is kept out of the iCloud and computer backups.
+    // The core is not started when the directory cannot be marked so.
+    do {
+      var noBackup = URLResourceValues()
+      noBackup.isExcludedFromBackup = true
+      try baseDir.setResourceValues(noBackup)
+    } catch {
+      NSLog("RetroShare: cannot keep %@ out of the backups: %@", baseDir.path, error.localizedDescription)
       return -1
     }
     return rs_ios_start(baseDir.path, jsonApiPort, jsonApiBindAddress)
