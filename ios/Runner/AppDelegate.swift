@@ -109,6 +109,9 @@ import UIKit
       }
     case "isRunning":
       result(rs_ios_is_running() != 0)
+    case "jsonApiPort":
+      // The interface asks where this application's core listens.
+      result(Int(AppDelegate.jsonApiPort))
     case "pushRegistration":
       result(AppDelegate.pushRegistration())
     case "secretSet":
