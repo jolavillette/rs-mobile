@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -48,6 +50,19 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
   void initState() {
     super.initState();
     _fetchPeerDetails();
+    // The buttons follow the node's state: read it again while the page
+    // is open.
+    _refresh = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !_connecting) _fetchPeerDetails();
+    });
+  }
+
+  Timer? _refresh;
+
+  @override
+  void dispose() {
+    _refresh?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchPeerDetails() async {
@@ -520,20 +535,26 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed:
-                        widget.location.rsPeerId.isEmpty ? null : _openChat,
+                    // Greyed while the node is not connected: a message
+                    // would not leave.
+                    onPressed: widget.location.rsPeerId.isEmpty || !_connected
+                        ? null
+                        : _openChat,
                     icon: const Icon(Icons.message_outlined),
                     label: const Text('Send message'),
                   ),
                 ),
               ),
-            if (!isValidationPending && !_isLoading && !_connected)
+            if (!isValidationPending)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                 child: SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: _connecting ? null : _attemptToConnect,
+                    // Greyed once connected, and while an attempt runs.
+                    onPressed: _connecting || _connected || _isLoading
+                        ? null
+                        : _attemptToConnect,
                     icon: const Icon(Icons.link),
                     label: Text(
                       _connecting ? 'Trying to connect...' : 'Attempt to connect',
