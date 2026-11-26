@@ -18,6 +18,11 @@ class RetroShareServiceAndroid : RsService() {
     companion object {
         const val ACTION_SHUTDOWN = "SHUTDOWN"
         const val CHANNEL_ID = "cc.retroshare.retroshare/retroshare"
+
+        // The permanent notification's channel. Android does not let an
+        // application change a channel it created, so the channel without
+        // a badge has its own name and the first one is removed.
+        const val SERVICE_CHANNEL_ID = "cc.retroshare.retroshare/service"
         private const val WAKELOCK_TAG = "RetroShareServiceAndroid:Wakelock"
 
         private val JSON_API_PORT_KEY = RsService::class.java.canonicalName + "/JSON_API_PORT_KEY"
@@ -61,15 +66,20 @@ class RetroShareServiceAndroid : RsService() {
     override fun onCreate() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
+                SERVICE_CHANNEL_ID,
                 "RetroShare Service Channel",
                 NotificationManager.IMPORTANCE_DEFAULT,
             )
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                .createNotificationChannel(channel)
+            // This notification is always there: it must not count on the
+            // application's icon, where the number is for unread messages.
+            channel.setShowBadge(false)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).apply {
+                createNotificationChannel(channel)
+                deleteNotificationChannel(CHANNEL_ID)
+            }
         }
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, SERVICE_CHANNEL_ID)
             .setContentTitle("RetroShare")
             .setContentText("RetroShare works in the background.")
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
