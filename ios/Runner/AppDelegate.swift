@@ -36,7 +36,8 @@ import UIKit
 
   /// iOS suspends the process right after it leaves the screen. The application
   /// then tells the core to go quiet, and the core needs a few seconds to pass
-  /// that on to its home nodes: ask the system for that time.
+  /// that on to its home nodes: ask the system for that time. The core also
+  /// saves its configuration meanwhile.
   @objc private func holdBackgroundTime() {
     let application = UIApplication.shared
     var task = UIBackgroundTaskIdentifier.invalid
@@ -47,6 +48,9 @@ import UIKit
       }
     }
     task = application.beginBackgroundTask(withName: "RetroShare going quiet", expirationHandler: finish)
+    // iOS may end the suspended process without notice: what the core has
+    // not saved by then is lost.
+    rsQueue.async { rs_ios_save_config() }
     DispatchQueue.main.asyncAfter(deadline: .now() + AppDelegate.quietHandoverSeconds, execute: finish)
   }
 
