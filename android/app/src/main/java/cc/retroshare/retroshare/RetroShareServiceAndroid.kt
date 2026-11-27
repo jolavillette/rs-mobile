@@ -104,10 +104,16 @@ class RetroShareServiceAndroid : RsService() {
             startForeground(1, notification)
         }
 
+        EnergyLog.serviceStarted(this)
+
         super.onCreate()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == EnergyLog.ACTION_SAMPLE) {
+            EnergyLog.sampleNow(this, sleepAllowed)
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_SHUTDOWN) {
             @Suppress("DEPRECATION")
             stopForeground(true)
@@ -180,6 +186,7 @@ class RetroShareServiceAndroid : RsService() {
                     // The home answered or the wait ended: the phone goes
                     // back to sleep at once, except for an item being handled.
                     stayAwake(AFTER_KEEP_ALIVE_WAKE_MS, replace = true)
+                    EnergyLog.keepAlive(this@RetroShareServiceAndroid, sleepAllowed)
                 } finally {
                     pending.finish()
                 }
@@ -190,6 +197,7 @@ class RetroShareServiceAndroid : RsService() {
     @SuppressLint("WakelockTimeout")
     override fun onMobileLinkSleepAllowed(allowed: Boolean) {
         sleepAllowed = allowed
+        EnergyLog.sleepAllowedChanged(this, allowed)
         if (allowed) {
             if (!keepAliveReceiverRegistered) {
                 ContextCompat.registerReceiver(
@@ -209,6 +217,7 @@ class RetroShareServiceAndroid : RsService() {
     }
 
     override fun onMobileLinkWakeUp() {
+        EnergyLog.incomingWake()
         synchronized(shortWakeLock) {
             incomingAwakeUntil = SystemClock.elapsedRealtime() + INCOMING_WAKE_MS
         }
@@ -226,7 +235,9 @@ class RetroShareServiceAndroid : RsService() {
         synchronized(shortWakeLock) {
             val now = SystemClock.elapsedRealtime()
             val floor = if (replace) incomingAwakeUntil else awakeUntil
+            val before = maxOf(awakeUntil, now)
             awakeUntil = maxOf(floor, now + ms)
+            EnergyLog.shortLock(awakeUntil - before)
             shortWakeLock.acquire(awakeUntil - now)
         }
     }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/provider/auth.dart';
+import 'package:retroshare/ui/energy_screen.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
 /// The node's traffic, received and sent kept apart: the speeds now with the
@@ -264,6 +265,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const EnergyScreen()),
+            ),
+            tooltip: 'Energy',
+            icon: const Icon(Icons.battery_charging_full_rounded),
+          ),
           IconButton(
             onPressed: _requestInProgress ? null : _refresh,
             tooltip: 'Refresh statistics',
