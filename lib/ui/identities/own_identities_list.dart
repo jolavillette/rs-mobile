@@ -7,9 +7,9 @@ import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Identity;
 
 /// My identities, as People (My Identities) and the Identities screen show
-/// them: the active one marked; a tap opens the identity, its menu makes it
-/// active, edits it or deletes it, never the active one; the list ends with a
-/// row to create an identity. It follows the Identities provider, so a
+/// them: the active one marked, a Use button on each of the others to make
+/// it the active one; a tap opens the identity, its menu edits it or deletes
+/// it, never the active one; the list ends with a row to create an identity. It follows the Identities provider, so a
 /// created or deleted identity shows at once.
 class OwnIdentitiesList extends StatelessWidget {
   const OwnIdentitiesList({required this.open, this.search = '', super.key});
@@ -42,8 +42,9 @@ class OwnIdentitiesList extends StatelessWidget {
         .where((i) => (i.name ?? '').toLowerCase().contains(query))
         .toList()
       ..sort(
-        (a, b) =>
-            (a.name ?? '').toLowerCase().compareTo((b.name ?? '').toLowerCase()),
+        (a, b) => (a.name ?? '')
+            .toLowerCase()
+            .compareTo((b.name ?? '').toLowerCase()),
       );
     return RefreshIndicator(
       onRefresh: ids.fetchOwnidenities,
@@ -68,42 +69,42 @@ class OwnIdentitiesList extends StatelessWidget {
             ),
             selected: active,
             onTap: () => open('/profile', arguments: {'id': identity}),
-            trailing: PopupMenuButton<String>(
-              tooltip: 'Actions',
-              onSelected: (action) {
-                switch (action) {
-                  case 'use':
-                    _useIdentity(context, identity);
-                  case 'edit':
-                    open('/updateIdentity', arguments: {'id': identity});
-                  case 'delete':
-                    showdeleteDialog(context, identity);
-                }
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'use',
-                  enabled: !active,
-                  child: Text(active ? 'Active identity' : 'Use this identity'),
-                ),
-                const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                PopupMenuItem(
-                  value: 'delete',
-                  enabled: !active,
-                  child: Text(
-                    active
-                        ? 'Delete (make another identity active first)'
-                        : 'Delete',
-                    style: active ? null : TextStyle(color: rs.down),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (active)
+                  Icon(Icons.check_circle, color: rs.brand)
+                else
+                  OutlinedButton(
+                    onPressed: () => _useIdentity(context, identity),
+                    child: const Text('Use'),
                   ),
+                PopupMenuButton<String>(
+                  tooltip: 'Actions',
+                  icon: Icon(Icons.more_vert, color: rs.inkDim),
+                  onSelected: (action) {
+                    switch (action) {
+                      case 'edit':
+                        open('/updateIdentity', arguments: {'id': identity});
+                      case 'delete':
+                        showdeleteDialog(context, identity);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    PopupMenuItem(
+                      value: 'delete',
+                      enabled: !active,
+                      child: Text(
+                        active
+                            ? 'Delete (make another identity active first)'
+                            : 'Delete',
+                        style: active ? null : TextStyle(color: rs.down),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-              child: Padding(
-                padding: const EdgeInsets.all(RsScale.s2),
-                child: active
-                    ? Icon(Icons.check_circle, color: rs.brand)
-                    : Icon(Icons.more_vert, color: rs.inkDim),
-              ),
             ),
             titleTextStyle:
                 active ? text.titleSmall?.copyWith(color: rs.brand) : null,
