@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/common/avatar_image.dart';
 import 'package:retroshare/common/bottom_bar.dart';
 import 'package:retroshare/common/color_loader_3.dart';
 import 'package:retroshare/common/identicon.dart';
@@ -40,21 +41,18 @@ class GenericIdentityTabState extends State<GenericIdentityTab> {
     super.dispose();
   }
 
-  void _setImage(File? image) {
+  /// The picture picked becomes the avatar, at the desktop's size.
+  Future<void> _setImage(File? image) async {
     Navigator.pop(context);
+    final avatar = image == null ? null : await avatarFromFile(image.path);
     if (!mounted) return;
+    if (image != null && avatar == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This picture could not be read.')),
+      );
+    }
     setState(() {
-      if (image != null) {
-        try {
-          final bytes = image.readAsBytesSync();
-          _image = RsGxsImage.fromBytes(bytes);
-        } catch (e) {
-          debugPrint('Error reading image file: $e');
-          _image = null;
-        }
-      } else {
-        _image = null;
-      }
+      _image = avatar == null ? null : RsGxsImage.fromBytes(avatar);
     });
   }
 
@@ -120,7 +118,11 @@ class GenericIdentityTabState extends State<GenericIdentityTab> {
                       GestureDetector(
                         onTap: () async {
                           if (_isLoading) return;
-                          await imagePickerDialog(context, _setImage);
+                          await imagePickerDialog(
+                            context,
+                            _setImage,
+                            imageQuality: 100,
+                          );
                         },
                         child: Container(
                           height: 300 * 0.7,
