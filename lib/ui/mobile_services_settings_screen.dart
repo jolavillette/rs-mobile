@@ -68,7 +68,8 @@ class _MobileServicesSettingsScreenState
         title: Text('Turn on ${service.name}?'),
         content: Text(
           '${service.role}\n\n'
-          'RetroShare Mobile cannot show it yet. Turned on, it makes this '
+          '${servicesWithPage.contains(service.type) ? '' : 'RetroShare Mobile cannot show it yet. '}'
+          'Turned on, it makes this '
           'phone use more CPU, mobile data, battery and storage.',
         ),
         actions: [
@@ -137,10 +138,10 @@ class _MobileServicesSettingsScreenState
               children: [
                 Text(
                   'Every service the RetroShare core runs on this phone. The '
-                  'services the app has no page for are off: they would use '
-                  'CPU, mobile data, battery and storage for nothing you can '
-                  'see. The app turns them off at every start, except the '
-                  'ones you turn on here.',
+                  'services the app does not need are off: they use CPU, '
+                  'mobile data, battery and storage. The app turns them off '
+                  'at every start, except the ones you turn on here or from '
+                  'their page (Forums, Channels).',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -150,7 +151,7 @@ class _MobileServicesSettingsScreenState
                   [for (final s in needed) _statusTile(s.name, s.role, s.type)],
                 ),
                 _section(
-                  'No page in the app',
+                  'Off unless you turn them on',
                   [for (final s in optional) _serviceSwitch(s)],
                 ),
                 if (others.isNotEmpty)

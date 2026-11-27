@@ -5,7 +5,7 @@ import 'package:retroshare/common/logout.dart';
 import 'package:retroshare/common/quit.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 
-/// More: Preferences (named and ordered as the desktop's), Statistics and,
+/// More: Forums and Channels, Preferences (named and ordered as the desktop's), Statistics and,
 /// on Android, Quit; on iOS, Log out.
 class MoreTab extends StatelessWidget {
   const MoreTab({required this.open, super.key});
@@ -18,6 +18,17 @@ class MoreTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: RsScale.s2),
       children: [
+        ListTile(
+          leading: const Icon(Icons.forum_outlined),
+          title: const Text('Forums'),
+          onTap: () => open('/forums'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.campaign_outlined),
+          title: const Text('Channels'),
+          onTap: () => open('/channels'),
+        ),
+        const Divider(),
         ListTile(
           leading: const Icon(Icons.settings_outlined),
           title: const Text('Preferences'),

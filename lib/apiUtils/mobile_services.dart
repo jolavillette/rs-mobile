@@ -93,7 +93,12 @@ const neededServices = <MobileService>[
   ),
 ];
 
-/// The services the app has no page for: on a phone they cost CPU, mobile
+/// The optional services the app has a page for: the page itself offers to
+/// turn its service on.
+const servicesWithPage = <int>{RsServiceTypes.forums, RsServiceTypes.channels};
+
+/// The services the app has no page for, and those whose page not everybody
+/// uses (forums, channels): on a phone they cost CPU, mobile
 /// data, battery or storage for nothing the user can see. The app turns them
 /// off at every login, except those the user turned on in Services.
 const optionalServices = <MobileService>[
