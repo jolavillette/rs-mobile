@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/gxs_content.dart';
+import 'package:retroshare/common/identity_avatar.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/gxs/gxs_body.dart';
@@ -178,7 +179,11 @@ class _ForumScreenState extends State<ForumScreen> {
       gxsDate(thread.lastActivity),
       if (answers > 0) '$answers answers',
     ].where((text) => text.isNotEmpty).join(' · ');
+    final author = _names?.identityOf(thread.root.authorId);
     return ListTile(
+      leading: author == null
+          ? const SizedBox(width: 40, child: Icon(Icons.person_outline))
+          : IdentityAvatar(identity: author),
       title: Text(
         thread.root.title.isEmpty ? '(no title)' : thread.root.title,
         maxLines: 2,
@@ -299,6 +304,7 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
           }
           final post = posts[index];
           final body = _bodies[post.id];
+          final author = _names?.identityOf(post.authorId);
           return Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: RsScale.s4,
@@ -307,11 +313,25 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${_names?.nameOf(post.authorId) ?? ''} · '
-                  '${gxsDate(post.published)}',
-                  style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
+                Row(
+                  children: [
+                    if (author != null) ...[
+                      IdentityAvatar(identity: author, size: 28),
+                      const SizedBox(width: RsScale.s2),
+                    ],
+                    Expanded(
+                      child: Text(
+                        '${_names?.nameOf(post.authorId) ?? ''} · '
+                        '${gxsDate(post.published)}',
+                        style: TextStyle(
+                          fontSize: RsScale.tMeta,
+                          color: rs.inkDim,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: RsScale.s1),
                 if (body == null)
                   Text(
                     'This post could not be read.',

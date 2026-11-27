@@ -335,11 +335,25 @@ class GxsAuthorNames {
 
   final AuthToken authToken;
   final Map<String, String> _names = {};
+  final Map<String, String> _avatars = {};
 
   /// The name known so far, or a short form of the id.
   String nameOf(String authorId) {
     if (authorId.isEmpty || _isNullId(authorId)) return 'Anonymous';
     return _names[authorId] ?? authorId.substring(0, 8);
+  }
+
+  /// The author as an identity, to draw the avatar: the one read from the
+  /// core, or the identicon of the id. Null for an anonymous post.
+  Identity? identityOf(String authorId) {
+    if (authorId.isEmpty || _isNullId(authorId)) return null;
+    return Identity(
+      mId: authorId,
+      name: _names[authorId],
+      avatar: _avatars[authorId],
+      signed: false,
+      isContact: false,
+    );
   }
 
   /// Asks the core for the names not known yet. True when one was learnt.
@@ -357,6 +371,8 @@ class GxsAuthorNames {
         final name = details is Map ? details['mNickname'] : null;
         if (_succeeded(response) && name is String && name.isNotEmpty) {
           _names[id] = name;
+          final avatar = details['mAvatar']?['mData']?['base64'];
+          if (avatar is String && avatar.isNotEmpty) _avatars[id] = avatar;
           learnt = true;
         }
       } catch (_) {

@@ -1202,12 +1202,11 @@ class MessagesTabState extends State<MessagesTab> {
                 final roomIdentityId = widget.isRoom == true
                     ? messagesList.roomIdentity(widget.chat.chatId ?? '')
                     : null;
-                final roomOwnName = identitiesProvider.ownIdentity
+                final roomOwnIdentity = identitiesProvider.ownIdentity
                         .where((id) => id.mId == roomIdentityId)
-                        .firstOrNull
-                        ?.name ??
-                    ownIdentity?.name ??
-                    'Me';
+                        .firstOrNull ??
+                    ownIdentity;
+                final roomOwnName = roomOwnIdentity?.name ?? 'Me';
 
                 return Stack(
                   children: <Widget>[
@@ -1245,6 +1244,11 @@ class MessagesTabState extends State<MessagesTab> {
                           key: key,
                           data: message,
                           bubbleTitle: bubbleTitle,
+                          author: isSystem || !(widget.isRoom ?? false)
+                              ? null
+                              : (message.incoming ?? false)
+                                  ? messagesList.chatSenderIdentity(message)
+                                  : roomOwnIdentity,
                           style: widget.bubbleStyle,
                         );
                       },
