@@ -3,11 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/gxs_content.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
-import 'package:retroshare/ui/gxs/gxs_body.dart';
+import 'package:retroshare/ui/gxs/channel_post_screen.dart';
 import 'package:retroshare/ui/gxs/gxs_group_bar.dart';
+import 'package:retroshare/ui/gxs/gxs_group_menu.dart';
 
-/// A channel: its posts, the newest first, read from the core a few at a
-/// time. The files of a post are listed, not downloaded.
+/// A channel: the thumbnails of its posts, the newest first, read from the
+/// core a few at a time as the page is scrolled. A tap opens the post.
 class ChannelScreen extends StatefulWidget {
   const ChannelScreen({required this.group, super.key});
 
@@ -18,7 +19,7 @@ class ChannelScreen extends StatefulWidget {
 }
 
 class _ChannelScreenState extends State<ChannelScreen> {
-  static const _batch = 5;
+  static const _batch = 12;
 
   GxsContent? _content;
   bool _loading = true;
@@ -83,9 +84,6 @@ class _ChannelScreenState extends State<ChannelScreen> {
       )
         ..sort((a, b) => b.meta.published.compareTo(a.meta.published));
       _posts.addAll(loaded);
-      for (final post in loaded) {
-        await content.markRead(widget.group.id, post.meta);
-      }
     } catch (error) {
       debugPrint('Channel ${widget.group.id}: $error');
     }
@@ -112,127 +110,196 @@ class _ChannelScreenState extends State<ChannelScreen> {
     await _load();
   }
 
+  /// Every post of the channel: the one shown in the grid where it is
+  /// loaded, as that is the one whose read mark the grid draws.
+  List<GxsPostMeta> _knownMetas() {
+    final shown = {for (final post in _posts) post.meta.id: post.meta};
+    return [for (final meta in _metas) shown[meta.id] ?? meta];
+  }
+
+  Future<void> _openPost(GxsPost post) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => ChannelPostScreen(groupId: widget.group.id, post: post),
+      ),
+    );
+    // The post is read now.
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final rs = context.rs;
     final remaining = _metas.length - _asked;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.group.name)),
+      appBar: AppBar(
+        title: Text(widget.group.name),
+        actions: [
+          GxsGroupMenu(
+            content: _content,
+            groupId: widget.group.id,
+            subscribed: _subscribed,
+            posts: _knownMetas,
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView(
-                children: [
-                  GxsGroupBar(
-                    kind: GxsContentKind.channels,
-                    subscribed: _subscribed,
-                    description: _description,
-                    busy: _busy,
-                    onSubscribe: _subscribe,
-                  ),
-                  const Divider(height: 1),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.all(RsScale.s4),
-                      child: Text(_error!, style: TextStyle(color: rs.inkDim)),
-                    )
-                  else if (_metas.isEmpty && _subscribed)
-                    Padding(
-                      padding: const EdgeInsets.all(RsScale.s4),
-                      child: Text(
-                        'No post yet. They arrive a few at a time while the '
-                        'app is on screen: pull down to read again.',
-                        style: TextStyle(color: rs.inkDim),
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (scroll) {
+                  if (scroll.metrics.extentAfter < 600) _loadMore();
+                  return false;
+                },
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GxsGroupBar(
+                            kind: GxsContentKind.channels,
+                            subscribed: _subscribed,
+                            description: _description,
+                            busy: _busy,
+                            onSubscribe: _subscribe,
+                          ),
+                          const Divider(height: 1),
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.all(RsScale.s4),
+                              child: Text(
+                                _error!,
+                                style: TextStyle(color: rs.inkDim),
+                              ),
+                            )
+                          else if (_metas.isEmpty && _subscribed)
+                            Padding(
+                              padding: const EdgeInsets.all(RsScale.s4),
+                              child: Text(
+                                'No post yet. They arrive a few at a time '
+                                'while the app is on screen: pull down to '
+                                'read again.',
+                                style: TextStyle(color: rs.inkDim),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                  for (final post in _posts) _post(post),
-                  if (_loadingMore)
-                    const Padding(
-                      padding: EdgeInsets.all(RsScale.s4),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (remaining > 0)
-                    TextButton(
-                      onPressed: _loadMore,
-                      child: Text('$remaining older'),
+                    SliverPadding(
+                      padding: const EdgeInsets.all(RsScale.s2),
+                      sliver: SliverGrid(
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                          // Three to a row on a phone.
+                          maxCrossAxisExtent: 130,
+                          mainAxisSpacing: RsScale.s2,
+                          crossAxisSpacing: RsScale.s2,
+                          childAspectRatio: 0.6,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => _card(_posts[index]),
+                          childCount: _posts.length,
+                        ),
+                      ),
                     ),
-                ],
+                    SliverToBoxAdapter(
+                      child: _loadingMore
+                          ? const Padding(
+                              padding: EdgeInsets.all(RsScale.s4),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          : remaining > 0
+                              ? TextButton(
+                                  onPressed: _loadMore,
+                                  child: Text('$remaining older'),
+                                )
+                              : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
               ),
             ),
     );
   }
 
-  Widget _post(GxsPost post) {
+  static String _fileCount(int count) =>
+      count == 1 ? '1 file' : '$count files';
+
+  /// A post in the grid: its thumbnail, its title and its date.
+  Widget _card(GxsPost post) {
     final rs = context.rs;
     final thumbnail = post.thumbnail;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(
-        RsScale.s3,
-        RsScale.s3,
-        RsScale.s3,
-        0,
+    final placeholder = ColoredBox(
+      color: rs.sunken,
+      child: Center(
+        child: Icon(Icons.campaign_outlined, size: 32, color: rs.inkFaint),
       ),
-      padding: const EdgeInsets.all(RsScale.s3),
-      decoration: BoxDecoration(
-        color: rs.surface,
-        border: Border.all(color: rs.line),
+    );
+    return Material(
+      color: rs.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: rs.line),
         borderRadius: BorderRadius.circular(RsScale.rMd),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            post.meta.title.isEmpty ? '(no title)' : post.meta.title,
-            style: TextStyle(
-              fontSize: RsScale.tH3,
-              fontWeight: FontWeight.w600,
-              color: rs.ink,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _openPost(post),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              // The whole picture, whatever its shape: never cropped.
+              child: thumbnail == null
+                  ? placeholder
+                  : ColoredBox(
+                      color: rs.sunken,
+                      child: Image.memory(
+                        thumbnail,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                        errorBuilder: (context, error, stackTrace) =>
+                            placeholder,
+                      ),
+                    ),
             ),
-          ),
-          Text(
-            gxsDate(post.meta.published),
-            style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
-          ),
-          if (thumbnail != null)
             Padding(
-              padding: const EdgeInsets.only(top: RsScale.s2),
-              child: Image.memory(
-                thumbnail,
-                fit: BoxFit.contain,
-                gaplessPlayback: true,
-                errorBuilder: (context, error, stackTrace) =>
-                    const SizedBox.shrink(),
-              ),
-            ),
-          if (post.body.trim().isNotEmpty) GxsBody(post.body),
-          for (final file in post.files)
-            Padding(
-              padding: const EdgeInsets.only(top: RsScale.s1),
-              child: Row(
+              padding: const EdgeInsets.all(RsScale.s1 + 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.insert_drive_file_outlined,
-                    size: 18,
-                    color: rs.inkDim,
-                  ),
-                  const SizedBox(width: RsScale.s2),
-                  Expanded(
-                    child: Text(
-                      file.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: RsScale.tRow),
+                  Text(
+                    post.meta.title.isEmpty ? '(no title)' : post.meta.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: RsScale.tLabel,
+                      fontWeight:
+                          post.meta.unread ? FontWeight.w700 : FontWeight.w500,
+                      color: rs.ink,
                     ),
                   ),
                   Text(
-                    gxsSize(file.size),
-                    style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
+                    [
+                      gxsDate(post.meta.published),
+                      if (post.files.isNotEmpty)
+                        _fileCount(post.files.length),
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: RsScale.tMicro, color: rs.inkDim),
                   ),
                 ],
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

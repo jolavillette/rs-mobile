@@ -3,7 +3,7 @@ import 'package:retroshare/apiUtils/gxs_content.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 
 /// What a forum or channel page shows above its posts: the description and
-/// the button to follow or leave it.
+/// the button to subscribe to it or unsubscribe from it.
 class GxsGroupBar extends StatelessWidget {
   const GxsGroupBar({
     required this.kind,
@@ -42,21 +42,21 @@ class GxsGroupBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: RsScale.s3),
               child: Text(
-                'This phone does not follow this ${kind.noun}: it has none '
-                'of its posts. Followed, it gets those of the last 15 days '
-                'from the friends that serve it.',
+                'This phone is not subscribed to this ${kind.noun}: it has '
+                'none of its posts. Subscribed, it gets those of the last 15 '
+                'days from the friends that serve it.',
                 style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
               ),
             ),
           if (subscribed)
             OutlinedButton(
               onPressed: busy ? null : () => onSubscribe(false),
-              child: const Text('Stop following'),
+              child: const Text('Unsubscribe'),
             )
           else
             FilledButton(
               onPressed: busy ? null : () => onSubscribe(true),
-              child: const Text('Follow'),
+              child: const Text('Subscribe'),
             ),
         ],
       ),

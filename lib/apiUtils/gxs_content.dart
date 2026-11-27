@@ -319,14 +319,60 @@ class GxsContent {
     return posts;
   }
 
-  Future<void> markRead(String groupId, GxsPostMeta post) async {
-    if (!post.unread) return;
+  Future<void> markRead(String groupId, GxsPostMeta post) =>
+      setRead(groupId, post, read: true);
+
+  /// Marks a post read or unread, in the core and in [post].
+  Future<void> setRead(
+    String groupId,
+    GxsPostMeta post, {
+    required bool read,
+  }) async {
+    if (post.unread != read) return;
     final pair = {'first': groupId, 'second': post.id};
     final response = _forums
-        ? await _call('markRead', {'messageId': pair, 'read': true})
-        : await _call('setMessageReadStatus', {'msgId': pair, 'read': true});
-    if (_succeeded(response)) post.status &= ~_statusUnread;
+        ? await _call('markRead', {'messageId': pair, 'read': read})
+        : await _call('setMessageReadStatus', {'msgId': pair, 'read': read});
+    if (!_succeeded(response)) return;
+    if (read) {
+      post.status &= ~_statusUnread;
+    } else {
+      post.status |= _statusUnread;
+    }
   }
+
+  /// Marks every one of [posts] read or unread. The core has no call for a
+  /// whole group: one per post whose mark changes.
+  Future<void> setAllRead(
+    String groupId,
+    List<GxsPostMeta> posts, {
+    required bool read,
+  }) async {
+    for (final post in posts) {
+      await setRead(groupId, post, read: read);
+    }
+  }
+
+  Future<int> _days(String method, String groupId) async {
+    final response = await _call(method, {'groupId': groupId});
+    final seconds = response['retval'];
+    return seconds is num ? seconds.toInt() ~/ 86400 : 0;
+  }
+
+  /// How far back the posts of a group are asked for, in days; 0 is no
+  /// limit.
+  Future<int> syncDays(String groupId) => _days('getSyncPeriod', groupId);
+
+  /// How long the posts of a group are kept, in days; 0 is no limit.
+  Future<int> storageDays(String groupId) => _days('getStoragePeriod', groupId);
+
+  Future<void> setSyncDays(String groupId, int days) =>
+      _call('setSyncPeriod', {'groupId': groupId, 'syncAge': days * 86400});
+
+  Future<void> setStorageDays(String groupId, int days) => _call(
+        'setStoragePeriod',
+        {'groupId': groupId, 'storageSecs': days * 86400},
+      );
 }
 
 /// The names of the identities that sign posts, asked from the core once.
