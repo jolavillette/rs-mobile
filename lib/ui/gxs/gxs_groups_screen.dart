@@ -5,13 +5,17 @@ import 'package:retroshare/apiUtils/mobile_services.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
 
-/// The forums, or the channels: those this phone follows, then those the
-/// friends that serve it follow. While the service is off the page says so
-/// and offers to turn it on.
+/// The forums, or the channels: those this phone is subscribed to, then,
+/// folded, those only the friends that serve it are subscribed to. While the
+/// service is off the page says so and offers to turn it on.
 class GxsGroupsScreen extends StatefulWidget {
-  const GxsGroupsScreen({required this.kind, super.key});
+  const GxsGroupsScreen({required this.kind, this.open, super.key});
 
   final GxsContentKind kind;
+
+  /// Set when the list is a tab of the home, which then supplies the title
+  /// bar: opens a named route, the future ending when the page is closed.
+  final Future<void> Function(String route, {Object? arguments})? open;
 
   @override
   State<GxsGroupsScreen> createState() => _GxsGroupsScreenState();
@@ -80,21 +84,25 @@ class _GxsGroupsScreenState extends State<GxsGroupsScreen> {
   }
 
   Future<void> _open(GxsGroup group) async {
-    await Navigator.pushNamed(
-      context,
-      widget.kind == GxsContentKind.forums ? '/forum' : '/channel',
-      arguments: group,
-    );
+    final route = widget.kind == GxsContentKind.forums ? '/forum' : '/channel';
+    final open = widget.open;
+    if (open != null) {
+      await open(route, arguments: group);
+    } else {
+      await Navigator.pushNamed(context, route, arguments: group);
+    }
     if (mounted) await _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(onRefresh: _load, child: _body(context));
+    if (widget.open != null) return body;
     return Scaffold(
       appBar: AppBar(title: Text(widget.kind.title)),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(onRefresh: _load, child: _body(context)),
+      body: body,
     );
   }
 
@@ -134,14 +142,39 @@ class _GxsGroupsScreenState extends State<GxsGroupsScreen> {
         'this phone: pull down to read the list again.',
       );
     }
-    final followed = _groups.where((g) => g.subscribed).toList();
+    final subscribed = _groups.where((g) => g.subscribed).toList();
     final others = _groups.where((g) => !g.subscribed).toList();
     return ListView(
       children: [
-        if (followed.isNotEmpty) _header('Followed'),
-        for (final group in followed) _tile(group),
-        if (others.isNotEmpty) _header('Followed by your friends'),
-        for (final group in others) _tile(group),
+        _header('Subscribed'),
+        if (subscribed.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: RsScale.s4,
+              vertical: RsScale.s2,
+            ),
+            child: Text(
+              'None yet. Open one below to subscribe to it.',
+              style: TextStyle(fontSize: RsScale.tRow, color: rs.inkDim),
+            ),
+          ),
+        for (final group in subscribed) _tile(group),
+        if (others.isNotEmpty)
+          Theme(
+            // No rule above and below the open section.
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              title: Text(
+                'UNSUBSCRIBED (${others.length})',
+                style: TextStyle(
+                  fontSize: RsScale.tLabel,
+                  letterSpacing: 0.6,
+                  color: rs.inkDim,
+                ),
+              ),
+              children: [for (final group in others) _tile(group)],
+            ),
+          ),
       ],
     );
   }
