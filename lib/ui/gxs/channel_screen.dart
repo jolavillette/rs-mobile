@@ -172,14 +172,15 @@ class _ChannelScreenState extends State<ChannelScreen> {
                       ),
                     ),
                     SliverPadding(
-                      padding: const EdgeInsets.all(RsScale.s3),
+                      padding: const EdgeInsets.all(RsScale.s2),
                       sliver: SliverGrid(
                         gridDelegate:
                             const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 200,
-                          mainAxisSpacing: RsScale.s3,
-                          crossAxisSpacing: RsScale.s3,
-                          childAspectRatio: 0.62,
+                          // Three to a row on a phone.
+                          maxCrossAxisExtent: 130,
+                          mainAxisSpacing: RsScale.s2,
+                          crossAxisSpacing: RsScale.s2,
+                          childAspectRatio: 0.6,
                         ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) => _card(_posts[index]),
@@ -217,7 +218,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
     final placeholder = ColoredBox(
       color: rs.sunken,
       child: Center(
-        child: Icon(Icons.campaign_outlined, size: 40, color: rs.inkFaint),
+        child: Icon(Icons.campaign_outlined, size: 32, color: rs.inkFaint),
       ),
     );
     return Material(
@@ -233,18 +234,22 @@ class _ChannelScreenState extends State<ChannelScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
+              // The whole picture, whatever its shape: never cropped.
               child: thumbnail == null
                   ? placeholder
-                  : Image.memory(
-                      thumbnail,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                      errorBuilder: (context, error, stackTrace) =>
-                          placeholder,
+                  : ColoredBox(
+                      color: rs.sunken,
+                      child: Image.memory(
+                        thumbnail,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                        errorBuilder: (context, error, stackTrace) =>
+                            placeholder,
+                      ),
                     ),
             ),
             Padding(
-              padding: const EdgeInsets.all(RsScale.s2),
+              padding: const EdgeInsets.all(RsScale.s1 + 2),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -253,7 +258,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: RsScale.tMeta,
+                      fontSize: RsScale.tLabel,
                       fontWeight:
                           post.meta.unread ? FontWeight.w700 : FontWeight.w500,
                       color: rs.ink,
