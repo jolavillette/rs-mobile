@@ -45,7 +45,15 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>RetroShare uses the camera to scan the QR code of a friend.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>RetroShare connects to your friends on the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app requires microphone access to record voice messages in chat.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>RetroShare saves received images to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RetroShare lets you pick images to send.</string>
 </dict>
 </plist>
