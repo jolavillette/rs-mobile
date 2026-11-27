@@ -160,7 +160,13 @@ object EnergyLog {
                 .start()
             val running = process
             val guard = Thread {
-                if (!running.waitFor(DUMPSYS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) running.destroy()
+                try {
+                    if (!running.waitFor(DUMPSYS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                        running.destroy()
+                    }
+                } catch (_: InterruptedException) {
+                    // The figure was read before the time ran out.
+                }
             }.apply { start() }
             val appId = Process.myUid() % 100000 - Process.FIRST_APPLICATION_UID
             val wanted = Regex("^\\s*UID u\\d+a$appId: ([0-9.]+)")
