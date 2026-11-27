@@ -15,6 +15,7 @@ final BehaviorSubject<String?> selectNotificationSubject =
 /// information does not.
 const chatNotificationChannel = 'retroshare_chat';
 const infoNotificationChannel = 'retroshare_info';
+const lobbyInviteNotificationChannel = 'RetroshareInvites';
 
 Future<void> initializeNotifications() async {
   if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
@@ -99,7 +100,7 @@ Future<void> showLobbyInviteNotification(
   if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
 
   const androidPlatformChannelSpecifics = AndroidNotificationDetails(
-    'RetroshareInvites',
+    lobbyInviteNotificationChannel,
     'RetroShare Invites',
     channelDescription: 'RetroShare chat lobby invitations',
     importance: Importance.max,
