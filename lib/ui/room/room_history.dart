@@ -27,6 +27,13 @@ const _dataIdleWait = Duration(seconds: 10);
 /// The library accepts the answers to a request for two minutes.
 const _dataMaxWait = Duration(seconds: 120);
 
+/// A friend answers the same friend once per 30 seconds and room, and stays
+/// silent in between: asking again sooner would look like a refusal.
+const _askAgainAfter = Duration(seconds: 32);
+
+/// Room -> when its history was last asked.
+final Map<String, DateTime> _lastAsked = {};
+
 /// Lines asked to each friend, and shown: the most recent ones.
 const _maxLines = 500;
 
@@ -245,21 +252,33 @@ Future<void> retrieveRoomHistory(
     say('None of the designated friends is connected.');
     return;
   }
+  final asked = _lastAsked[lobbyId];
+  if (asked != null) {
+    final left = _askAgainAfter - DateTime.now().difference(asked);
+    if (left > Duration.zero) {
+      say(
+        'This history was asked a moment ago, and a friend answers once '
+        'every 30 seconds. Ask again in ${left.inSeconds + 1} seconds.',
+      );
+      return;
+    }
+  }
 
   final oldest = DateTime.now().millisecondsSinceEpoch ~/ 1000 - hours * 3600;
   final fetch = _Fetch(lobbyId);
   _fetch = fetch;
   try {
     final lobby = {'xstr64': lobbyId};
-    final asked = await rsApiCall(
+    final sent = await rsApiCall(
       '/rsChats/requestLobbyHistory',
       authToken: token,
       params: {'lobby_id': lobby, 'peer_ids': friends},
     );
-    if (asked['retval'] != true) {
+    if (sent['retval'] != true) {
       say('None of the designated friends is in this room.');
       return;
     }
+    _lastAsked[lobbyId] = DateTime.now();
     say('Asking your friends what they have...');
 
     // What each friend has, for a few seconds or until all answered.
@@ -272,7 +291,11 @@ Future<void> retrieveRoomHistory(
     }
     fetch.waitingProbes = false;
     if (fetch.probes.isEmpty) {
-      say('No friend answered: none shares the history of this room.');
+      say(
+        'No friend answered. A friend answers if it shares its history and '
+        'already sees this phone in the room: just after a connection, ask '
+        'again in a minute.',
+      );
       return;
     }
 
@@ -280,7 +303,7 @@ Future<void> retrieveRoomHistory(
       final from = probe.value != 0 && probe.value > oldest
           ? probe.value
           : oldest;
-      final sent = await rsApiCall(
+      final accepted = await rsApiCall(
         '/rsChats/requestLobbyHistoryFromPeer',
         authToken: token,
         params: {
@@ -290,7 +313,7 @@ Future<void> retrieveRoomHistory(
           'oldest_ts': from,
         },
       );
-      if (sent['retval'] == true) fetch.pending.add(probe.key);
+      if (accepted['retval'] == true) fetch.pending.add(probe.key);
     }
 
     // Each friend marks the end of what it sends; the waits only cover a
