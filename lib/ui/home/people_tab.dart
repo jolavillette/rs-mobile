@@ -7,9 +7,10 @@ import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/ui/identities/own_identities_list.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Chat, Identity;
 
-/// People: identities, filtered to my contacts, my own identities (where
-/// they are created, edited and deleted) or every identity known. The
-/// distant chats with them are in Chat.
+/// People: identities, filtered to my own identities (shown first: where
+/// the active one is chosen and where they are created, edited and deleted),
+/// my contacts or every identity known. The distant chats with them are in
+/// Chat.
 class PeopleTab extends StatefulWidget {
   const PeopleTab({required this.open, this.onOpenRoom, super.key});
 
@@ -24,8 +25,8 @@ class PeopleTab extends StatefulWidget {
 }
 
 enum _Filter {
-  contacts('Contacts', Icons.people_outline),
   own('My Identities', Icons.person_outline),
+  contacts('Contacts', Icons.people_outline),
   all('All Users', Icons.groups_outlined);
 
   const _Filter(this.label, this.icon);
@@ -39,7 +40,7 @@ enum _Filter {
 const _listCap = 200;
 
 class _PeopleTabState extends State<PeopleTab> {
-  _Filter _filter = _Filter.contacts;
+  _Filter _filter = _Filter.own;
   String _search = '';
 
   @override
@@ -175,8 +176,7 @@ class _PeopleTabState extends State<PeopleTab> {
                   ],
                   selected: {_filter},
                   showSelectedIcon: false,
-                  onSelectionChanged: (s) =>
-                      setState(() => _filter = s.first),
+                  onSelectionChanged: (s) => setState(() => _filter = s.first),
                 ),
               ),
             ],
@@ -277,7 +277,6 @@ class _PeopleTabState extends State<PeopleTab> {
       ),
     );
   }
-
 }
 
 /// The identities that can become contacts, with a search: the web UI picks
@@ -346,8 +345,8 @@ class _AddContactSheetState extends State<_AddContactSheet> {
                       child: Text('No identity found', style: text.bodyMedium),
                     )
                   : ListView.builder(
-                      itemCount: shown.length +
-                          (list.length > shown.length ? 1 : 0),
+                      itemCount:
+                          shown.length + (list.length > shown.length ? 1 : 0),
                       itemBuilder: (context, i) {
                         if (i == shown.length) {
                           return Padding(
