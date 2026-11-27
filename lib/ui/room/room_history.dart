@@ -6,11 +6,16 @@ import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // The lines of a room that this phone missed, asked to the friends that are
 // in the room and kept them, as the desktop does: each friend is first asked
 // what it has, then for its lines. A friend answers only if its user allowed
 // the sharing of the history, and with the lines its node stored.
+//
+// The lines come back unsigned: a friend could send lines nobody wrote. So
+// only the friends the user designated, in the chat settings or from the
+// room menu, are asked.
 
 /// RsChatLobbyEventCode values of the two answers.
 const _probeResponse = 0x0a;
@@ -97,8 +102,90 @@ bool handleRoomHistoryEvent(dynamic event) {
   return true;
 }
 
+String _friendsKey(String locationId) => 'history_friends_$locationId';
+
+/// The friend nodes (SSL ids) the user designated to be asked for the
+/// history, for the node [locationId].
+Future<Set<String>> historyFriends(String locationId) async {
+  final prefs = await SharedPreferences.getInstance();
+  return (prefs.getStringList(_friendsKey(locationId)) ?? const <String>[])
+      .toSet();
+}
+
+/// Lets the user designate the friends asked for the history. Returns the
+/// new choice, or null when the user cancelled.
+Future<Set<String>?> chooseHistoryFriends(BuildContext context) async {
+  final locationId = Provider.of<AccountCredentials>(context, listen: false)
+      .loggedinAccount
+      ?.locationId;
+  if (locationId == null) return null;
+  final nodes = [
+    ...Provider.of<FriendLocations>(context, listen: false).friendlist,
+  ]..sort(
+      (a, b) => a.accountName.toLowerCase().compareTo(
+            b.accountName.toLowerCase(),
+          ),
+    );
+  final picked = await historyFriends(locationId);
+  if (!context.mounted) return null;
+
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        title: const Text('Friends asked for the history'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const Text(
+                'When you retrieve the history of a room, these friends are '
+                'asked for the lines they kept. Select only friends you '
+                'trust: the lines they send are not signed, so a friend '
+                'could send lines that nobody wrote.',
+              ),
+              const SizedBox(height: 8),
+              if (nodes.isEmpty) const Text('You have no friend yet.'),
+              for (final node in nodes)
+                CheckboxListTile(
+                  value: picked.contains(node.rsPeerId),
+                  title: Text(node.accountName),
+                  subtitle: Text(node.locationName),
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (on) => setDialogState(() {
+                    if (on == true) {
+                      picked.add(node.rsPeerId);
+                    } else {
+                      picked.remove(node.rsPeerId);
+                    }
+                  }),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (saved != true) return null;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setStringList(_friendsKey(locationId), picked.toList());
+  return picked;
+}
+
 /// Asks the user how far back to go, then retrieves the lines of the room
-/// [lobbyId] from the connected friends and adds the new ones to the chat.
+/// [lobbyId] from the designated friends that are connected and adds the
+/// new ones to the chat.
 Future<void> retrieveRoomHistory(
   BuildContext context,
   String lobbyId,
@@ -108,39 +195,37 @@ Future<void> retrieveRoomHistory(
   final rooms = Provider.of<RoomChatLobby>(context, listen: false);
   final token =
       Provider.of<AccountCredentials>(context, listen: false).authtoken;
+  final locationId = Provider.of<AccountCredentials>(context, listen: false)
+      .loggedinAccount
+      ?.locationId;
+  if (token == null || locationId == null) return;
+
+  // The period, or -1 to designate the friends first.
+  const chooseFriends = -1;
+  int? hours;
+  var designated = await historyFriends(locationId);
+  while (true) {
+    if (!context.mounted) return;
+    final locations =
+        Provider.of<FriendLocations>(context, listen: false).friendlist;
+    final names = [
+      for (final location in locations)
+        if (designated.contains(location.rsPeerId))
+          location.isOnline
+              ? location.accountName
+              : '${location.accountName} (not connected)',
+    ];
+    hours = await _askPeriod(context, names, chooseFriends);
+    if (hours != chooseFriends) break;
+    designated = await chooseHistoryFriends(context) ?? designated;
+  }
+  if (hours == null || !context.mounted) return;
+
   final friends = Provider.of<FriendLocations>(context, listen: false)
       .friendlist
-      .where((location) => location.isOnline)
-      .map((location) => location.rsPeerId)
+      .where((l) => l.isOnline && designated.contains(l.rsPeerId))
+      .map((l) => l.rsPeerId)
       .toList();
-  if (token == null) return;
-
-  final hours = await showDialog<int>(
-    context: context,
-    builder: (dialogContext) => SimpleDialog(
-      title: const Text('Retrieve the history from friends'),
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
-          child: Text(
-            'Your connected friends that are in this room send the lines '
-            'they kept, if they allow it in their chat settings.',
-          ),
-        ),
-        for (final choice in const [
-          (1, 'The last hour'),
-          (6, 'The last 6 hours'),
-          (24, 'The last 24 hours'),
-          (168, 'The last 7 days'),
-        ])
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(dialogContext, choice.$1),
-            child: Text(choice.$2),
-          ),
-      ],
-    ),
-  );
-  if (hours == null) return;
 
   void say(String text) {
     messenger
@@ -152,8 +237,12 @@ Future<void> retrieveRoomHistory(
     say('A history is already being retrieved.');
     return;
   }
+  if (designated.isEmpty) {
+    say('Designate first the friends to ask.');
+    return;
+  }
   if (friends.isEmpty) {
-    say('No friend is connected.');
+    say('None of the designated friends is connected.');
     return;
   }
 
@@ -168,7 +257,7 @@ Future<void> retrieveRoomHistory(
       params: {'lobby_id': lobby, 'peer_ids': friends},
     );
     if (asked['retval'] != true) {
-      say('None of your connected friends is in this room.');
+      say('None of the designated friends is in this room.');
       return;
     }
     say('Asking your friends what they have...');
@@ -263,3 +352,49 @@ Future<void> retrieveRoomHistory(
     _fetch = null;
   }
 }
+
+/// The period to retrieve, in hours; [chooseFriends] when the user wants to
+/// designate the friends; null when cancelled. [names] are the designated
+/// friends.
+Future<int?> _askPeriod(
+  BuildContext context,
+  List<String> names,
+  int chooseFriends,
+) =>
+    showDialog<int>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Retrieve the history from friends'),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text(
+              names.isEmpty
+                  ? 'No friend is designated yet. The friends you designate '
+                      'send the lines they kept, if they are in this room '
+                      'and allow it in their chat settings.'
+                  : 'Asked: ${names.join(', ')}. They send the lines they '
+                      'kept, if they are in this room and allow it in their '
+                      'chat settings.',
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, chooseFriends),
+            child: const Text('Designate the friends to ask...'),
+          ),
+          const Divider(),
+          for (final choice in const [
+            (1, 'The last hour'),
+            (6, 'The last 6 hours'),
+            (24, 'The last 24 hours'),
+            (168, 'The last 7 days'),
+          ])
+            SimpleDialogOption(
+              onPressed: names.isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, choice.$1),
+              child: Text(choice.$2),
+            ),
+        ],
+      ),
+    );
