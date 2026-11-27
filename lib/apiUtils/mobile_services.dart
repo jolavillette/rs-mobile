@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// A core service as the Services page shows it.
 class MobileService {
-  const MobileService(this.type, this.name, this.role);
+  const MobileService(this.type, this.name, this.role, {this.offWarning});
 
   /// 16-bit service type.
   final int type;
@@ -13,6 +13,10 @@ class MobileService {
 
   /// What the service does, shown under its switch and in the warning.
   final String role;
+
+  /// What stops working when the user turns the service off, for the
+  /// services of [switchableServices].
+  final String? offWarning;
 
   int get fullId => rsFullServiceId(type);
 }
@@ -35,11 +39,6 @@ const neededServices = <MobileService>[
     RsServiceTypes.heartbeat,
     'Heartbeat',
     'Keeps the connections with friends alive.',
-  ),
-  MobileService(
-    RsServiceTypes.discovery,
-    'Discovery',
-    "Exchanges friends' addresses and keys.",
   ),
   MobileService(
     RsServiceTypes.chat,
@@ -90,6 +89,21 @@ const neededServices = <MobileService>[
     RsServiceTypes.banList,
     'Ban list',
     'Shares banned IP addresses with friends.',
+  ),
+];
+
+/// The services the app works without, on unless the user turns them off in
+/// Services. The core remembers the choice.
+const switchableServices = <MobileService>[
+  MobileService(
+    RsServiceTypes.discovery,
+    'Discovery',
+    "Exchanges addresses, keys and versions with your friends.",
+    offWarning: 'Without it this phone no longer learns the new addresses of '
+        'your friends, nor tells them its own: it reaches a friend only at '
+        'the addresses it already knows. A friend added with a short '
+        'RetroShare ID stays unverified, since its key comes through this '
+        "service. The friends' RetroShare version is no longer shown.",
   ),
 ];
 

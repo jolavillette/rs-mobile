@@ -5,8 +5,9 @@ import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
-/// Every service the core runs, in three groups: those the app needs (shown,
-/// not switchable), those the app has no page for (off; the app turns them
+/// Every service the core runs, in four groups: those the app needs (shown,
+/// not switchable), those it works without (on; turning one off asks for
+/// confirmation), those the app has no page for (off; the app turns them
 /// off at every login, turning one on here asks for confirmation and is
 /// remembered for this node), and any other service the core reports.
 class MobileServicesSettingsScreen extends StatefulWidget {
@@ -86,12 +87,39 @@ class _MobileServicesSettingsScreenState
     return turnOn == true;
   }
 
+  Future<bool> _confirmTurnOff(MobileService service) async {
+    final turnOff = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded),
+        title: Text('Turn off ${service.name}?'),
+        content: Text('${service.role}\n\n${service.offWarning ?? ''}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Turn off'),
+          ),
+        ],
+      ),
+    );
+    return turnOff == true;
+  }
+
+  /// Turns a service on or off. An optional service asks before going on
+  /// and the app remembers it, or it would go off again at the next login;
+  /// a switchable one asks before going off and the core remembers it.
   Future<void> _setServiceOn(MobileService service, bool on) async {
     final auth = Provider.of<AccountCredentials>(context, listen: false);
     final authToken = auth.authtoken;
     final locationId = auth.loggedinAccount?.locationId;
     if (authToken == null || locationId == null) return;
-    if (on && !await _confirmTurnOn(service)) return;
+    final optional = optionalServices.contains(service);
+    if (optional && on && !await _confirmTurnOn(service)) return;
+    if (!optional && !on && !await _confirmTurnOff(service)) return;
     if (!mounted) return;
 
     setState(() => _updating.add(service.type));
@@ -99,7 +127,7 @@ class _MobileServicesSettingsScreenState
       final done =
           await RsServiceControl.setServiceEnabled(service.fullId, on, authToken);
       if (!done) throw Exception('updateServicePermissions returned false');
-      await setOptedIn(locationId, service.type, on);
+      if (optional) await setOptedIn(locationId, service.type, on);
       if (mounted) setState(() => _on[service.type] = on);
     } catch (error) {
       debugPrint('Failed to update service permission: $error');
@@ -120,8 +148,11 @@ class _MobileServicesSettingsScreenState
         neededServices.where((s) => _coreServices.containsKey(s.type));
     final optional =
         optionalServices.where((s) => _coreServices.containsKey(s.type));
+    final switchable =
+        switchableServices.where((s) => _coreServices.containsKey(s.type));
     final listed = {
       ...neededServices.map((s) => s.type),
+      ...switchableServices.map((s) => s.type),
       ...optionalServices.map((s) => s.type),
     };
     final others = (_coreServices.keys.where((t) => !listed.contains(t))
@@ -148,6 +179,10 @@ class _MobileServicesSettingsScreenState
                 _section(
                   'Needed by the app',
                   [for (final s in needed) _statusTile(s.name, s.role, s.type)],
+                ),
+                _section(
+                  'The app works without',
+                  [for (final s in switchable) _serviceSwitch(s)],
                 ),
                 _section(
                   'No page in the app',
