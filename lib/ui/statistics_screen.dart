@@ -6,8 +6,9 @@ import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/energy_screen.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
-/// The node's traffic, received and sent kept apart: the speeds now with the
-/// totals since the core started under them, then the same for each service.
+/// Two tabs. Bandwidth: the node's traffic, received and sent kept apart,
+/// the speeds now with the totals since the core started under them, then
+/// the same for each service. Battery: what RetroShare costs the phone.
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
 
@@ -252,102 +253,106 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
         backgroundColor: theme.colorScheme.surface,
-        shadowColor: Colors.transparent,
-        title: Text(
-          'Statistics',
-          style: TextStyle(
-            color: theme.colorScheme.onSurface,
-            fontSize: 14.5,
+        appBar: AppBar(
+          backgroundColor: theme.colorScheme.surface,
+          shadowColor: Colors.transparent,
+          title: Text(
+            'Statistics',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontSize: 14.5,
+            ),
+          ),
+          actions: [
+            IconButton(
+              onPressed: _requestInProgress ? null : _refresh,
+              tooltip: 'Refresh the bandwidth figures',
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ],
+          bottom: const TabBar(
+            tabs: [Tab(text: 'Bandwidth'), Tab(text: 'Battery')],
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const EnergyScreen()),
-            ),
-            tooltip: 'Energy',
-            icon: const Icon(Icons.battery_charging_full_rounded),
-          ),
-          IconButton(
-            onPressed: _requestInProgress ? null : _refresh,
-            tooltip: 'Refresh statistics',
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          // Down to above the system navigation bar.
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            16 + MediaQuery.viewPaddingOf(context).bottom,
-          ),
+        body: TabBarView(
           children: [
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 16),
-                child: LinearProgressIndicator(),
+            RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                // Down to above the system navigation bar.
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.viewPaddingOf(context).bottom,
+                ),
+                children: [
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 16),
+                      child: LinearProgressIndicator(),
+                    ),
+                  if (_error != null)
+                    Card(
+                      color: theme.colorScheme.errorContainer,
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.error_outline_rounded,
+                          color: theme.colorScheme.onErrorContainer,
+                        ),
+                        title: Text(
+                          _error!,
+                          style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                        ),
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _statCard(
+                          context,
+                          icon: Icons.arrow_downward_rounded,
+                          color: Colors.green,
+                          label: 'Received',
+                          rate: _formatRate(_downloadRate),
+                          total: _formatBytes(_downloadedBytes),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _statCard(
+                          context,
+                          icon: Icons.arrow_upward_rounded,
+                          color: Colors.blue,
+                          label: 'Sent',
+                          rate: _formatRate(_uploadRate),
+                          total: _formatBytes(_uploadedBytes),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  Text('By service', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  _serviceTable(context),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Speeds over the last ${_refreshPeriod.inSeconds} seconds, in '
+                    'kB/s; totals in MB since RetroShare started on this phone. '
+                    'Tap a column to sort by it.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-            if (_error != null)
-              Card(
-                color: theme.colorScheme.errorContainer,
-                child: ListTile(
-                  leading: Icon(
-                    Icons.error_outline_rounded,
-                    color: theme.colorScheme.onErrorContainer,
-                  ),
-                  title: Text(
-                    _error!,
-                    style: TextStyle(color: theme.colorScheme.onErrorContainer),
-                  ),
-                ),
-              ),
-            Row(
-              children: [
-                Expanded(
-                  child: _statCard(
-                    context,
-                    icon: Icons.arrow_downward_rounded,
-                    color: Colors.green,
-                    label: 'Received',
-                    rate: _formatRate(_downloadRate),
-                    total: _formatBytes(_downloadedBytes),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _statCard(
-                    context,
-                    icon: Icons.arrow_upward_rounded,
-                    color: Colors.blue,
-                    label: 'Sent',
-                    rate: _formatRate(_uploadRate),
-                    total: _formatBytes(_uploadedBytes),
-                  ),
-                ),
-              ],
             ),
-            const SizedBox(height: 28),
-            Text('By service', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            _serviceTable(context),
-            const SizedBox(height: 12),
-            Text(
-              'Speeds over the last ${_refreshPeriod.inSeconds} seconds, in '
-              'kB/s; totals in MB since RetroShare started on this phone. '
-              'Tap a column to sort by it.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+            const EnergyView(),
           ],
         ),
       ),

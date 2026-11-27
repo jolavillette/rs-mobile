@@ -145,17 +145,18 @@ class _Period {
   double get powerHours => powerMs / 3600000;
 }
 
-/// What RetroShare does to the battery: its own activity, the battery of the
-/// whole phone and, when adb granted the permissions, what Android charges
-/// to the application; over the last time in background, 24 hours and 7 days.
-class EnergyScreen extends StatefulWidget {
-  const EnergyScreen({super.key});
+/// The Battery tab of Statistics. What RetroShare does to the battery: its
+/// own activity, the battery of the whole phone and, when adb granted the
+/// permissions, what Android charges to the application; over the last time
+/// in background, 24 hours and 7 days. Pulled down, it measures again.
+class EnergyView extends StatefulWidget {
+  const EnergyView({super.key});
 
   @override
-  State<EnergyScreen> createState() => _EnergyScreenState();
+  State<EnergyView> createState() => _EnergyViewState();
 }
 
-class _EnergyScreenState extends State<EnergyScreen> {
+class _EnergyViewState extends State<EnergyView> {
   static const _channel = MethodChannel('cc.retroshare.retroshare/energy');
 
   bool _loading = true;
@@ -171,6 +172,7 @@ class _EnergyScreenState extends State<EnergyScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       _powerPermissions =
@@ -229,25 +231,10 @@ class _EnergyScreenState extends State<EnergyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        backgroundColor: theme.colorScheme.surface,
-        shadowColor: Colors.transparent,
-        title: Text(
-          'Energy',
-          style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14.5),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _loading ? null : _refresh,
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: ListView(
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         // Down to above the system navigation bar.
         padding: EdgeInsets.fromLTRB(
           16,
