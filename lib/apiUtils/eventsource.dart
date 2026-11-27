@@ -8,6 +8,7 @@ import 'package:retroshare/model/app_life_cycle_state.dart';
 import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/provider/subscribed.dart';
+import 'package:retroshare/ui/room/room_history.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
 // register chat event
@@ -17,6 +18,7 @@ Future<void> registerChatEvent(
 ) async {
   await eventsRegisterChatMessage(
     listenCb: (var json, ChatMessage? msg) {
+      if (handleRoomHistoryEvent(json)) return;
       if (msg == null) return;
       final roomChatLobby = Provider.of<RoomChatLobby>(context, listen: false);
       final chatLobby = Provider.of<ChatLobby>(context, listen: false);
