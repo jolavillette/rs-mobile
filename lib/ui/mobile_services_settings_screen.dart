@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/mobile_services.dart';
 import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare/provider/auth.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
 /// Every service the core runs, in four groups: those the app needs (shown,
@@ -160,7 +161,10 @@ class _MobileServicesSettingsScreenState
       ..sort());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Permissions')),
+      appBar: AppBar(
+        title: const Text('Permissions'),
+        actions: const [ManualButton('permissions')],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(

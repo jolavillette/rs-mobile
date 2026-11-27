@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/energy_screen.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
 /// Two tabs. Bandwidth: the node's traffic, received and sent kept apart,
@@ -268,6 +269,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ),
           ),
           actions: [
+            const ManualButton('statistics'),
             IconButton(
               onPressed: _requestInProgress ? null : _refresh,
               tooltip: 'Refresh the bandwidth figures',

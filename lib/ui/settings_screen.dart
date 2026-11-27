@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare/provider/auth.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -19,6 +20,7 @@ class SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Preferences'),
+        actions: const [ManualButton('preferences')],
         backgroundColor: theme.colorScheme.surface,
         shadowColor: Colors.transparent,
         leading: BackButton(

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare/provider/room.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -404,6 +405,10 @@ Future<int?> _askPeriod(
           SimpleDialogOption(
             onPressed: () => Navigator.pop(dialogContext, chooseFriends),
             child: const Text('Designate the friends to ask...'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => openManual(dialogContext, 'history'),
+            child: const Text('How it works'),
           ),
           const Divider(),
           for (final choice in const [

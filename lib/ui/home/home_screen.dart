@@ -18,6 +18,7 @@ import 'package:retroshare/ui/home/home_tab.dart';
 import 'package:retroshare/ui/home/network_tab.dart';
 import 'package:retroshare/ui/home/people_tab.dart';
 import 'package:retroshare/ui/home/scroll_nav_bar.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Chat, Location;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retroshare/common/rs_tokens.dart';
@@ -242,6 +243,17 @@ class HomeScreenState extends State<HomeScreen> {
     if (mounted) unawaited(fetchdata(context));
   }
 
+  /// The page of the manual that explains each tab, in the order of
+  /// [_titles].
+  static const _manualPages = [
+    'home',
+    'network',
+    'people',
+    'chats',
+    'forums',
+    'forums',
+  ];
+
   static const _titles = [
     'Home',
     'Network',
@@ -294,6 +306,11 @@ class HomeScreenState extends State<HomeScreen> {
         icon: const Icon(Icons.query_stats_outlined),
         onTap: () => _open('/statistics'),
       ),
+      ScrollNavItem(
+        label: 'Manual',
+        icon: const Icon(Icons.menu_book_outlined),
+        onTap: () => openManual(context),
+      ),
       if (Platform.isAndroid)
         ScrollNavItem(
           label: 'Quit',
@@ -344,6 +361,7 @@ class HomeScreenState extends State<HomeScreen> {
         // The root of the app: nothing to go back to.
         automaticallyImplyLeading: false,
         title: Text(_titles[_tab]),
+        actions: [ManualButton(_manualPages[_tab])],
       ),
       body: Stack(
         children: [

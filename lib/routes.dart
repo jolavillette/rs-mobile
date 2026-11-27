@@ -10,6 +10,7 @@ import 'package:retroshare/ui/create_identity/create_identity_screen.dart';
 import 'package:retroshare/ui/create_room_screen.dart';
 import 'package:retroshare/ui/direct_peer_chat_screen.dart';
 import 'package:retroshare/ui/discover_chats_screen.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare/ui/friend_location_detail_screen.dart';
 import 'package:retroshare/ui/friends_locations_screen.dart';
 import 'package:retroshare/ui/gxs/channel_screen.dart';
@@ -150,6 +151,14 @@ class RouteGenerator {
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
       case '/statistics':
         return MaterialPageRoute(builder: (_) => const StatisticsScreen());
+      case '/manual':
+        return MaterialPageRoute(
+          builder: (_) => ManualScreen(
+            page: settings.arguments is String
+                ? settings.arguments! as String
+                : 'index',
+          ),
+        );
       case '/chat_settings':
         return MaterialPageRoute(builder: (_) => const ChatSettingsScreen());
       case '/about':
