@@ -843,6 +843,15 @@ class RoomChatLobby with ChangeNotifier {
     }
   }
 
+  /// The author of a stored line: its id, or its name when the core kept no
+  /// id, which is the case of the lines a friend relayed from its history.
+  static String? _historyAuthor(Map<dynamic, dynamic> stored) {
+    final id = stored['peerId']?.toString() ?? '';
+    if (id.isNotEmpty && !RegExp(r'^0+$').hasMatch(id)) return id;
+    final name = stored['peerName']?.toString() ?? '';
+    return name.isNotEmpty ? name : null;
+  }
+
   Future<void> loadChatHistory(String chatId, ChatId apiChatId) async {
     try {
       final response = await rsApiCall(
@@ -865,7 +874,7 @@ class RoomChatLobby with ChangeNotifier {
               incoming: m['incoming'] ?? true,
               sendTime: m['sendTime'] ?? 0,
               recvTime: m['recvTime'] ?? 0,
-              lobbyPeerGxsId: m['peerId'],
+              lobbyPeerGxsId: _historyAuthor(m),
               chatflags: 0x0004, // rsChatFlagsHistory
             ),);
           }
