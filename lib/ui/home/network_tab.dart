@@ -1,10 +1,16 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/common/avatar_image.dart';
+import 'package:retroshare/common/image_picker_dialog.dart';
+import 'package:retroshare/common/node_avatar.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
+import 'package:retroshare/provider/node_avatars.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
@@ -76,8 +82,7 @@ class NetworkTab extends StatefulWidget {
 
 enum _View { network, chats }
 
-class _NetworkTabState extends State<NetworkTab>
-    with WidgetsBindingObserver {
+class _NetworkTabState extends State<NetworkTab> with WidgetsBindingObserver {
   /// The friend list is read again at this pace while the app is on screen:
   /// connections, disconnections and names that arrive after the first
   /// connection show up without leaving the page.
@@ -141,9 +146,7 @@ class _NetworkTabState extends State<NetworkTab>
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     final search = _search.toLowerCase();
-    return friends
-        .where((f) => f.name.toLowerCase().contains(search))
-        .toList();
+    return friends.where((f) => f.name.toLowerCase().contains(search)).toList();
   }
 
   Future<void> _openChat(Location location) async {
@@ -243,9 +246,10 @@ class _NetworkTabState extends State<NetworkTab>
               '${f.customState.isNotEmpty ? ' · ${f.customState}' : ''}';
       rows.add(
         ListTile(
-          leading: _AvatarWithStatus(
+          leading: NodeAvatar(
             name: f.name,
-            color: f.pendingValidation
+            nodeIds: [for (final l in f.locations) l.rsPeerId],
+            statusColor: f.pendingValidation
                 ? rs.warn
                 : statusColor(context, f.status, f.isOnline),
           ),
@@ -256,8 +260,7 @@ class _NetworkTabState extends State<NetworkTab>
               fontWeight: f.isOnline ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
-          subtitle:
-              Text(summary, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(summary, maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: Icon(folded ? Icons.expand_more : Icons.expand_less),
           onTap: () => setState(() {
             if (!_unfolded.remove(f.gpgId)) _unfolded.add(f.gpgId);
@@ -279,12 +282,12 @@ class _NetworkTabState extends State<NetworkTab>
               left: RsScale.s6 + RsScale.s5,
               right: RsScale.s4,
             ),
-            leading: Icon(
-              Icons.circle,
-              size: 10,
-              color: statusColor(context, node.status, node.isOnline),
+            leading: NodeAvatar(
+              name: node.locationName,
+              nodeIds: [node.rsPeerId],
+              radius: 13,
+              statusColor: statusColor(context, node.status, node.isOnline),
             ),
-            minLeadingWidth: RsScale.s3,
             title: Text(
               node.locationName.isEmpty ? 'Unnamed node' : node.locationName,
               style: text.bodyMedium?.copyWith(
@@ -335,9 +338,10 @@ class _NetworkTabState extends State<NetworkTab>
         final (f, l, chat) = withChat[i];
         final unread = chat.unreadCount;
         return ListTile(
-          leading: _AvatarWithStatus(
+          leading: NodeAvatar(
             name: f.name,
-            color: statusColor(context, l.status, l.isOnline),
+            nodeIds: [l.rsPeerId],
+            statusColor: statusColor(context, l.status, l.isOnline),
           ),
           title: Text(f.name),
           subtitle: Text(
@@ -356,47 +360,9 @@ class _NetworkTabState extends State<NetworkTab>
   }
 }
 
-class _AvatarWithStatus extends StatelessWidget {
-  const _AvatarWithStatus({required this.name, required this.color});
-
-  final String name;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final rs = context.rs;
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: Stack(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: rs.brandPale,
-            foregroundColor: rs.brandDeep,
-            child: Text(name.isEmpty ? '?' : name[0].toUpperCase()),
-          ),
-          Positioned(
-            right: 2,
-            bottom: 2,
-            child: Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(color: rs.surface, width: 2),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// My presence, as on top of the web UI's Network page: name (location), a
-/// status dot to change Online / Away / Busy, and my status message.
+/// My presence, as on top of the web UI's Network page: the avatar of my
+/// node, name (location), a status dot, and my status message. A tap on the
+/// avatar changes the status (Online / Away / Busy) or the avatar.
 class _OwnProfileCard extends StatefulWidget {
   const _OwnProfileCard();
 
@@ -443,6 +409,42 @@ class _OwnProfileCardState extends State<_OwnProfileCard> {
     } catch (e) {
       debugPrint('Cannot set my presence: $e');
     }
+  }
+
+  /// Menu values next to the presence ones.
+  static const _changeAvatar = -1;
+  static const _removeAvatar = -2;
+
+  /// The picture picked becomes the avatar of this node, at the desktop's
+  /// size.
+  Future<void> _setAvatar(File? picture) async {
+    Navigator.pop(context);
+    if (picture == null) return;
+    final avatar = await avatarFromFile(picture.path);
+    if (avatar == null) {
+      _say('This picture could not be read.');
+      return;
+    }
+    await _storeAvatar(avatar);
+  }
+
+  Future<void> _storeAvatar(Uint8List avatar) async {
+    final authToken = _authToken;
+    if (authToken == null) return;
+    try {
+      if (!await NodeAvatars.instance.setOwn(avatar, authToken)) {
+        _say('The avatar was refused.');
+      }
+    } catch (e) {
+      debugPrint('Cannot set the avatar of my node: $e');
+      _say('The avatar could not be changed.');
+    }
+  }
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _editCustomState() async {
@@ -503,8 +505,18 @@ class _OwnProfileCardState extends State<_OwnProfileCard> {
       child: Row(
         children: [
           PopupMenuButton<int>(
-            tooltip: 'Status: ${statusLabel(_status, true)}. Tap to change.',
-            onSelected: _setStatus,
+            tooltip: 'Status: ${statusLabel(_status, true)}. Tap to change '
+                'it or the avatar.',
+            onSelected: (value) {
+              switch (value) {
+                case _changeAvatar:
+                  imagePickerDialog(context, _setAvatar, imageQuality: 100);
+                case _removeAvatar:
+                  _storeAvatar(Uint8List(0));
+                default:
+                  _setStatus(value);
+              }
+            },
             itemBuilder: (_) => [
               for (final (value, label) in const [
                 (3, 'Online'),
@@ -526,10 +538,20 @@ class _OwnProfileCardState extends State<_OwnProfileCard> {
                     ],
                   ),
                 ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: _changeAvatar,
+                child: Text('Change avatar'),
+              ),
+              const PopupMenuItem(
+                value: _removeAvatar,
+                child: Text('Remove avatar'),
+              ),
             ],
-            child: _AvatarWithStatus(
+            child: NodeAvatar(
               name: account?.pgpName ?? '',
-              color: statusColor(context, _status, true),
+              own: true,
+              statusColor: statusColor(context, _status, true),
             ),
           ),
           const SizedBox(width: RsScale.s3),

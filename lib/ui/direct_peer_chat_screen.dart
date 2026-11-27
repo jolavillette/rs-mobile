@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:retroshare/common/identicon.dart';
+import 'package:retroshare/common/node_avatar.dart';
 import 'package:retroshare/common/styles.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/ui/room/message_delegate.dart';
@@ -137,13 +137,11 @@ class _DirectPeerChatScreenState extends State<DirectPeerChatScreen> {
                   SizedBox(
                     width: appBarHeight,
                     height: appBarHeight,
-                    child: CircleAvatar(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
-                      child: Identicon(
-                        id: widget.location.rsPeerId,
-                        size: appBarHeight * 0.7,
-                        borderRadius: appBarHeight * 0.35,
+                    child: Center(
+                      child: NodeAvatar(
+                        name: widget.location.accountName,
+                        nodeIds: [widget.location.rsPeerId],
+                        radius: appBarHeight * 0.35,
                       ),
                     ),
                   ),
