@@ -5,6 +5,7 @@ import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/gxs/gxs_body.dart';
 import 'package:retroshare/ui/gxs/gxs_group_bar.dart';
+import 'package:retroshare/ui/gxs/gxs_group_menu.dart';
 
 /// A thread of a forum: the post that starts it and its answers.
 class ForumThread {
@@ -133,7 +134,20 @@ class _ForumScreenState extends State<ForumScreen> {
   Widget build(BuildContext context) {
     final rs = context.rs;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.group.name)),
+      appBar: AppBar(
+        title: Text(widget.group.name),
+        actions: [
+          GxsGroupMenu(
+            content: _content,
+            groupId: widget.group.id,
+            subscribed: _subscribed,
+            posts: () => [for (final thread in _threads) ...thread.posts],
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

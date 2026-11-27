@@ -5,6 +5,7 @@ import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/gxs/channel_post_screen.dart';
 import 'package:retroshare/ui/gxs/gxs_group_bar.dart';
+import 'package:retroshare/ui/gxs/gxs_group_menu.dart';
 
 /// A channel: the thumbnails of its posts, the newest first, read from the
 /// core a few at a time as the page is scrolled. A tap opens the post.
@@ -109,6 +110,13 @@ class _ChannelScreenState extends State<ChannelScreen> {
     await _load();
   }
 
+  /// Every post of the channel: the one shown in the grid where it is
+  /// loaded, as that is the one whose read mark the grid draws.
+  List<GxsPostMeta> _knownMetas() {
+    final shown = {for (final post in _posts) post.meta.id: post.meta};
+    return [for (final meta in _metas) shown[meta.id] ?? meta];
+  }
+
   Future<void> _openPost(GxsPost post) async {
     await Navigator.push(
       context,
@@ -125,7 +133,20 @@ class _ChannelScreenState extends State<ChannelScreen> {
     final rs = context.rs;
     final remaining = _metas.length - _asked;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.group.name)),
+      appBar: AppBar(
+        title: Text(widget.group.name),
+        actions: [
+          GxsGroupMenu(
+            content: _content,
+            groupId: widget.group.id,
+            subscribed: _subscribed,
+            posts: _knownMetas,
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
