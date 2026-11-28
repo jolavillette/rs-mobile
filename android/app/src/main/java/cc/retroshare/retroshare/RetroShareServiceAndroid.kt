@@ -84,7 +84,7 @@ class RetroShareServiceAndroid : RsService() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("RetroShare")
             .setContentText("RetroShare works in the background.")
-            .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .setSmallIcon(R.drawable.ic_stat_retroshare)
             .build()
 
         wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)

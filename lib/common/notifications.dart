@@ -18,7 +18,7 @@ Future<void> initializeNotifications() async {
       await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
 
   const initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
+      AndroidInitializationSettings('@drawable/ic_stat_retroshare');
   const initializationSettings =
       InitializationSettings(android: initializationSettingsAndroid);
   await flutterLocalNotificationsPlugin.initialize(
@@ -64,7 +64,7 @@ Future<void> showChatNotification(
   const androidPlatformChannelSpecifics = AndroidNotificationDetails(
     'RetroshareFlutter',
     'RetroshareFlutter',
-    channelDescription: 'Retroshare flutter app',
+    channelDescription: 'RetroShare flutter app',
     importance: Importance.max,
     priority: Priority.high,
     ticker: 'ticker',
@@ -94,8 +94,8 @@ Future<void> showLobbyInviteNotification(
 
   const androidPlatformChannelSpecifics = AndroidNotificationDetails(
     'RetroshareInvites',
-    'Retroshare Invites',
-    channelDescription: 'Retroshare chat lobby invitations',
+    'RetroShare Invites',
+    channelDescription: 'RetroShare chat lobby invitations',
     importance: Importance.max,
     priority: Priority.high,
     color: Colors.purple,
@@ -118,7 +118,7 @@ Future<void> showInviteCopyNotification() async {
   const androidPlatformChannelSpecifics = AndroidNotificationDetails(
     'RetroshareFlutter',
     'RetroshareFlutter',
-    channelDescription: 'Retroshare flutter app',
+    channelDescription: 'RetroShare flutter app',
     ticker: 'ticker',
   );
   const platformChannelSpecifics =

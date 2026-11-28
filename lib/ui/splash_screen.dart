@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/retroshare_service.dart';
 import 'package:retroshare/common/color_loader_3.dart';
+import 'package:retroshare/common/rs_logo.dart';
 import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/identity.dart';
@@ -128,9 +129,9 @@ class SplashState extends State<SplashScreen> {
   }
 
   Widget _buildLogo() {
-    return Hero(
+    return const Hero(
       tag: 'logo',
-      child: Image.asset('assets/rs-logo.png'),
+      child: RsLogo(),
     );
   }
 

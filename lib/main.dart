@@ -101,7 +101,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           child: MaterialApp(
             navigatorKey: navigatorKey,
             debugShowCheckedModeBanner: false,
-            title: 'Retroshare',
+            title: 'RetroShare',
             theme: theme,
             darkTheme: darkTheme,
             initialRoute: '/',

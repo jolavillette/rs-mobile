@@ -144,6 +144,10 @@ flutter:
           weight: 500
         - asset: assets/fonts/Vollkorn/static/Vollkorn-Bold.ttf
           weight: 700
+    # The desktop's wordmark (RsLogo). OFL.txt next to it.
+    - family: Lato
+      fonts:
+        - asset: assets/fonts/Lato/Lato-Regular.ttf
   #     
   #     
   #
