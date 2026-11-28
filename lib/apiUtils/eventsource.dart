@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:html/parser.dart';
@@ -11,6 +13,15 @@ import 'package:retroshare/provider/subscribed.dart';
 import 'package:retroshare/ui/room/room_history.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
+/// A friend invited this node to a room (the core's
+/// RsChatLobbyEventCode::CHAT_LOBBY_INVITE_RECEIVED). Only the room events
+/// carry mTimeShift; the distant chat events have their own codes, which may
+/// use the same numbers.
+bool _isLobbyInvite(dynamic event) =>
+    event is Map &&
+    event.containsKey('mTimeShift') &&
+    '${event['mEventCode']}' == '4';
+
 // register chat event
 Future<void> registerChatEvent(
   BuildContext context,
@@ -19,6 +30,12 @@ Future<void> registerChatEvent(
   await eventsRegisterChatMessage(
     listenCb: (var json, ChatMessage? msg) {
       if (handleRoomHistoryEvent(json)) return;
+      if (_isLobbyInvite(json)) {
+        unawaited(
+          Provider.of<ChatLobby>(context, listen: false).checkForNewInvites(),
+        );
+        return;
+      }
       if (msg == null) return;
       final roomChatLobby = Provider.of<RoomChatLobby>(context, listen: false);
       final chatLobby = Provider.of<ChatLobby>(context, listen: false);
