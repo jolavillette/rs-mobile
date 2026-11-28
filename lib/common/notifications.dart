@@ -29,6 +29,17 @@ Future<void> initializeNotifications() async {
       selectNotificationSubject.add(payload);
     },
   );
+
+  // Android 13 and later drop the notifications of an app that does not hold
+  // POST_NOTIFICATIONS, silently: chat messages and lobby invitations never
+  // showed. The app has to ask for it; Android asks the user only once.
+  if (Platform.isAndroid) {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+  }
 }
 
 void configureSelectNotificationSubject(BuildContext context) {
