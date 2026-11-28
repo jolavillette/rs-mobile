@@ -1136,11 +1136,6 @@ class MessagesTabState extends State<MessagesTab> {
                           key: key,
                           data: message,
                           bubbleTitle: bubbleTitle,
-                          author: isSystem || !(widget.isRoom ?? false)
-                              ? null
-                              : (message.incoming ?? false)
-                                  ? messagesList.chatSenderIdentity(message)
-                                  : roomOwnIdentity,
                           style: widget.bubbleStyle,
                         );
                       },

@@ -10,8 +10,6 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
-import 'package:retroshare/common/identity_avatar.dart';
-import 'package:retroshare/common/nickname_color.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/ui/home/add_friend_dialog.dart';
 import 'package:retroshare/ui/room/voice_message_widget.dart';
@@ -88,12 +86,9 @@ class MessageDelegate extends StatelessWidget {
     super.key,
     required this.data,
     required this.bubbleTitle,
-    this.author,
     this.style = BubbleStyle.bubble,
   });
 
-  /// The author of a room message, whose avatar is drawn beside it.
-  final Identity? author;
   final String bubbleTitle;
   final ChatMessage data;
   final BubbleStyle style;
@@ -117,7 +112,6 @@ class MessageDelegate extends StatelessWidget {
     final messageContent = data.msg ?? '';
 
     final isIncoming = data.incoming ?? true;
-    final isLobby = data.isLobbyMessage();
 
     // RetroShare Chat Flags
     const rsChatFlagsHistory = 0x0004;
@@ -147,69 +141,6 @@ class MessageDelegate extends StatelessWidget {
       // Regular outgoing
       bubbleColor = const Color(0xFF8EFF3D);
       borderColor = const Color(0xFF00B000);
-    }
-
-    if (isLobby) {
-      // As the desktop's chat rooms: no frame around the messages, the
-      // author's name in a colour of their own and the time beside it, the
-      // message below.
-      final theme = Theme.of(context);
-      final dimmed = theme.colorScheme.onSurface.withOpacity(0.6);
-      final nameColor = isSystem
-          ? dimmed
-          : nicknameColor(bubbleTitle, theme.scaffoldBackgroundColor);
-      const avatarSide = 32.0;
-      final author = isSystem ? null : this.author;
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.only(top: 2, right: 8),
-              child: author == null
-                  ? const SizedBox(width: avatarSide)
-                  : IdentityAvatar(identity: author, size: avatarSide),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: <Widget>[
-                      Flexible(
-                        child: Text(
-                          bubbleTitle,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: nameColor,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        formattedTime,
-                        style: TextStyle(color: dimmed, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  _buildHtmlContent(
-                    context,
-                    messageContent,
-                    isIncoming,
-                    textColor: isSystem ? dimmed : theme.colorScheme.onSurface,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
     }
 
     // As in every messenger: my messages on the right, the others' and the
@@ -361,14 +292,15 @@ class MessageDelegate extends StatelessWidget {
     );
   }
 
-  /// The author and time beside a bubble, aligned on the bubble's side.
+  /// The author and time beside a bubble, aligned on the bubble's side. A
+  /// long name, frequent in the rooms, wraps instead of narrowing the bubble.
   Widget _buildLabel(
     BuildContext context,
     String title,
     String time, {
     required bool rightOfBubble,
   }) {
-    return Column(
+    final column = Column(
       crossAxisAlignment:
           rightOfBubble ? CrossAxisAlignment.start : CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
@@ -382,6 +314,7 @@ class MessageDelegate extends StatelessWidget {
         ),
         Text(
           title,
+          textAlign: rightOfBubble ? TextAlign.start : TextAlign.end,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
@@ -389,6 +322,12 @@ class MessageDelegate extends StatelessWidget {
           ),
         ),
       ],
+    );
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.3,
+      ),
+      child: column,
     );
   }
 
