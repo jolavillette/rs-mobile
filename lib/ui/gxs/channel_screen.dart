@@ -4,11 +4,13 @@ import 'package:retroshare/apiUtils/gxs_content.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/gxs/channel_post_screen.dart';
+import 'package:retroshare/ui/gxs/gxs_file_tile.dart';
 import 'package:retroshare/ui/gxs/gxs_group_bar.dart';
 import 'package:retroshare/ui/gxs/gxs_group_menu.dart';
 
-/// A channel: the thumbnails of its posts, the newest first, read from the
-/// core a few at a time as the page is scrolled. A tap opens the post.
+/// A channel, in the desktop's three tabs: its details; the thumbnails of
+/// its posts, the newest first, read from the core a few at a time as the
+/// page is scrolled, a tap opening the post; and the files of those posts.
 class ChannelScreen extends StatefulWidget {
   const ChannelScreen({required this.group, super.key});
 
@@ -28,6 +30,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
   String? _error;
   bool _subscribed = false;
   String _description = '';
+  GxsGroupInfo? _info;
   List<GxsPostMeta> _metas = const [];
   final List<GxsPost> _posts = [];
   int _asked = 0;
@@ -52,6 +55,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
       setState(() {
         _subscribed = info?.group.subscribed ?? _subscribed;
         _description = info?.description ?? '';
+        _info = info;
         _metas = metas;
         _posts.clear();
         _asked = 0;
@@ -130,102 +134,253 @@ class _ChannelScreenState extends State<ChannelScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final rs = context.rs;
-    final remaining = _metas.length - _asked;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.group.name),
-        actions: [
-          GxsGroupMenu(
-            content: _content,
-            groupId: widget.group.id,
-            subscribed: _subscribed,
-            posts: _knownMetas,
-            onChanged: () {
-              if (mounted) setState(() {});
-            },
+    return DefaultTabController(
+      length: 3,
+      // The posts first, as the desktop opens a channel.
+      initialIndex: 1,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.group.name),
+          actions: [
+            GxsGroupMenu(
+              content: _content,
+              groupId: widget.group.id,
+              subscribed: _subscribed,
+              posts: _knownMetas,
+              onChanged: () {
+                if (mounted) setState(() {});
+              },
+            ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Details'),
+              Tab(text: 'Posts'),
+              Tab(text: 'All files'),
+            ],
           ),
-        ],
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                children: [_details(), _postsTab(), _filesTab()],
+              ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: NotificationListener<ScrollNotification>(
-                onNotification: (scroll) {
-                  if (scroll.metrics.extentAfter < 600) _loadMore();
-                  return false;
-                },
-                child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          GxsGroupBar(
-                            kind: GxsContentKind.channels,
-                            subscribed: _subscribed,
-                            description: _description,
-                            busy: _busy,
-                            onSubscribe: _subscribe,
-                          ),
-                          const Divider(height: 1),
-                          if (_error != null)
-                            Padding(
-                              padding: const EdgeInsets.all(RsScale.s4),
-                              child: Text(
-                                _error!,
-                                style: TextStyle(color: rs.inkDim),
-                              ),
-                            )
-                          else if (_metas.isEmpty && _subscribed)
-                            Padding(
-                              padding: const EdgeInsets.all(RsScale.s4),
-                              child: Text(
-                                'No post yet. They arrive a few at a time '
-                                'while the app is on screen: pull down to '
-                                'read again.',
-                                style: TextStyle(color: rs.inkDim),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.all(RsScale.s2),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                          // Three to a row on a phone.
-                          maxCrossAxisExtent: 130,
-                          mainAxisSpacing: RsScale.s2,
-                          crossAxisSpacing: RsScale.s2,
-                          childAspectRatio: 0.6,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => _card(_posts[index]),
-                          childCount: _posts.length,
-                        ),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _loadingMore
-                          ? const Padding(
-                              padding: EdgeInsets.all(RsScale.s4),
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          : remaining > 0
-                              ? TextButton(
-                                  onPressed: _loadMore,
-                                  child: Text('$remaining older'),
-                                )
-                              : const SizedBox.shrink(),
-                    ),
-                  ],
+    );
+  }
+
+  /// Loads older posts as a list nears its end.
+  Widget _scrolling(Widget child) => RefreshIndicator(
+        onRefresh: _load,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (scroll) {
+            if (scroll.metrics.extentAfter < 600) _loadMore();
+            return false;
+          },
+          child: child,
+        ),
+      );
+
+  /// The channel's picture, description and figures, and the button to
+  /// subscribe or unsubscribe.
+  Widget _details() {
+    final rs = context.rs;
+    final group = _info?.group ?? widget.group;
+    final image = _info?.image;
+    final figures = [
+      if (group.visiblePosts > 0) '${group.visiblePosts} posts',
+      if (group.lastPost > 0) 'last post ${gxsDate(group.lastPost)}',
+      if (group.popularity > 0)
+        group.popularity == 1
+            ? '1 friend subscribed'
+            : '${group.popularity} friends subscribed',
+    ];
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          if (image != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                RsScale.s4,
+                RsScale.s4,
+                RsScale.s4,
+                0,
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(RsScale.rMd),
+                  child: Image.memory(
+                    image,
+                    width: 96,
+                    height: 96,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),
+          if (figures.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                RsScale.s4,
+                RsScale.s3,
+                RsScale.s4,
+                0,
+              ),
+              child: Text(
+                figures.join(' · '),
+                style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
+              ),
+            ),
+          GxsGroupBar(
+            kind: GxsContentKind.channels,
+            subscribed: _subscribed,
+            description: _description,
+            busy: _busy,
+            onSubscribe: _subscribe,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// What a tab says before its content: an error, no post yet, or not
+  /// subscribed, with the button to subscribe.
+  List<Widget> _notice() {
+    final rs = context.rs;
+    return [
+      if (_error != null)
+        Padding(
+          padding: const EdgeInsets.all(RsScale.s4),
+          child: Text(_error!, style: TextStyle(color: rs.inkDim)),
+        )
+      else if (!_subscribed)
+        Padding(
+          padding: const EdgeInsets.all(RsScale.s4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Not subscribed: this phone gets none of its posts.',
+                  style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
+                ),
+              ),
+              FilledButton(
+                onPressed: _busy ? null : () => _subscribe(true),
+                child: const Text('Subscribe'),
+              ),
+            ],
+          ),
+        )
+      else if (_metas.isEmpty)
+        Padding(
+          padding: const EdgeInsets.all(RsScale.s4),
+          child: Text(
+            'No post yet. They arrive a few at a time while the app is on '
+            'screen: pull down to read again.',
+            style: TextStyle(color: rs.inkDim),
+          ),
+        ),
+    ];
+  }
+
+  /// The end of a list: loading, or the button for the older posts.
+  Widget _more() {
+    final remaining = _metas.length - _asked;
+    if (_loadingMore) {
+      return const Padding(
+        padding: EdgeInsets.all(RsScale.s4),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (remaining <= 0) return const SizedBox.shrink();
+    return TextButton(
+      onPressed: _loadMore,
+      child: Text('$remaining older'),
+    );
+  }
+
+  Widget _postsTab() {
+    final notice = _notice();
+    return _scrolling(
+      CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          if (notice.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: notice,
+              ),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.all(RsScale.s2),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                // Three to a row on a phone.
+                maxCrossAxisExtent: 130,
+                mainAxisSpacing: RsScale.s2,
+                crossAxisSpacing: RsScale.s2,
+                childAspectRatio: 0.6,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _card(_posts[index]),
+                childCount: _posts.length,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(child: _more()),
+        ],
+      ),
+    );
+  }
+
+  /// The files of the posts read so far, newest post first, each under the
+  /// title of its post.
+  Widget _filesTab() {
+    final rs = context.rs;
+    final notice = _notice();
+    final withFiles = _posts.where((post) => post.files.isNotEmpty).toList();
+    return _scrolling(
+      ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          ...notice,
+          if (notice.isEmpty && withFiles.isEmpty && !_loadingMore)
+            Padding(
+              padding: const EdgeInsets.all(RsScale.s4),
+              child: Text(
+                'No file in the posts read so far.',
+                style: TextStyle(color: rs.inkDim),
+              ),
+            ),
+          for (final post in withFiles) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                RsScale.s4,
+                RsScale.s3,
+                RsScale.s4,
+                0,
+              ),
+              child: Text(
+                '${post.meta.title.isEmpty ? '(no title)' : post.meta.title}'
+                ' · ${gxsDate(post.meta.published)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
+              ),
+            ),
+            for (final file in post.files)
+              GxsFileTile(file, key: ValueKey('${post.meta.id}/${file.hash}')),
+          ],
+          _more(),
+        ],
+      ),
     );
   }
 
