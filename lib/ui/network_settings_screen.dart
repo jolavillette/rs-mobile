@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare/apiUtils/dht_switch.dart';
 import 'package:retroshare/apiUtils/turtle_relay.dart';
 import 'package:retroshare/provider/auth.dart';
@@ -157,6 +158,7 @@ class NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          const ManualButton('preferences'),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh Status',

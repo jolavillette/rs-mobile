@@ -10,6 +10,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/common/identity_avatar.dart';
 import 'package:retroshare/common/nickname_color.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/ui/home/add_friend_dialog.dart';
@@ -87,9 +88,12 @@ class MessageDelegate extends StatelessWidget {
     super.key,
     required this.data,
     required this.bubbleTitle,
+    this.author,
     this.style = BubbleStyle.bubble,
   });
 
+  /// The author of a room message, whose avatar is drawn beside it.
+  final Identity? author;
   final String bubbleTitle;
   final ChatMessage data;
   final BubbleStyle style;
@@ -154,39 +158,54 @@ class MessageDelegate extends StatelessWidget {
       final nameColor = isSystem
           ? dimmed
           : nicknameColor(bubbleTitle, theme.scaffoldBackgroundColor);
+      const avatarSide = 32.0;
+      final author = isSystem ? null : this.author;
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: <Widget>[
-                Flexible(
-                  child: Text(
-                    bubbleTitle,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: nameColor,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  formattedTime,
-                  style: TextStyle(color: dimmed, fontSize: 11),
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.only(top: 2, right: 8),
+              child: author == null
+                  ? const SizedBox(width: avatarSide)
+                  : IdentityAvatar(identity: author, size: avatarSide),
             ),
-            const SizedBox(height: 2),
-            _buildHtmlContent(
-              context,
-              messageContent,
-              isIncoming,
-              textColor: isSystem ? dimmed : theme.colorScheme.onSurface,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          bubbleTitle,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: nameColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        formattedTime,
+                        style: TextStyle(color: dimmed, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  _buildHtmlContent(
+                    context,
+                    messageContent,
+                    isIncoming,
+                    textColor: isSystem ? dimmed : theme.colorScheme.onSurface,
+                  ),
+                ],
+              ),
             ),
           ],
         ),

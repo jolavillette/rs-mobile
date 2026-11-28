@@ -1,6 +1,7 @@
 import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/room/room_history.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
@@ -208,6 +209,7 @@ class ChatSettingsScreenState extends State<ChatSettingsScreen> {
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Chat Settings'),
+        actions: const [ManualButton('chat-settings')],
         backgroundColor: theme.colorScheme.surface,
         shadowColor: Colors.transparent,
         leading: BackButton(

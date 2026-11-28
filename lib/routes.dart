@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:retroshare/apiUtils/gxs_content.dart';
 import 'package:retroshare/ui/about_retroshare_screen.dart';
 import 'package:retroshare/ui/about_screen.dart';
 import 'package:retroshare/ui/appearance_screen.dart';
@@ -9,8 +10,12 @@ import 'package:retroshare/ui/create_identity/create_identity_screen.dart';
 import 'package:retroshare/ui/create_room_screen.dart';
 import 'package:retroshare/ui/direct_peer_chat_screen.dart';
 import 'package:retroshare/ui/discover_chats_screen.dart';
+import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare/ui/friend_location_detail_screen.dart';
 import 'package:retroshare/ui/friends_locations_screen.dart';
+import 'package:retroshare/ui/gxs/channel_screen.dart';
+import 'package:retroshare/ui/gxs/forum_screen.dart';
+import 'package:retroshare/ui/gxs/gxs_groups_screen.dart';
 import 'package:retroshare/ui/home/home_screen.dart';
 import 'package:retroshare/ui/launch_transition_screen.dart';
 import 'package:retroshare/ui/mobile_services_settings_screen.dart';
@@ -146,6 +151,14 @@ class RouteGenerator {
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
       case '/statistics':
         return MaterialPageRoute(builder: (_) => const StatisticsScreen());
+      case '/manual':
+        return MaterialPageRoute(
+          builder: (_) => ManualScreen(
+            page: settings.arguments is String
+                ? settings.arguments! as String
+                : 'index',
+          ),
+        );
       case '/chat_settings':
         return MaterialPageRoute(builder: (_) => const ChatSettingsScreen());
       case '/about':
@@ -154,6 +167,35 @@ class RouteGenerator {
         return MaterialPageRoute(builder: (_) => const AppearanceScreen());
       case '/web_help':
         return MaterialPageRoute(builder: (_) => const AboutScreen());
+      case '/forums':
+        return MaterialPageRoute(
+          builder: (_) => const GxsGroupsScreen(kind: GxsContentKind.forums),
+        );
+      case '/channels':
+        return MaterialPageRoute(
+          builder: (_) => const GxsGroupsScreen(kind: GxsContentKind.channels),
+        );
+      case '/forum':
+        if (args is GxsGroup) {
+          return MaterialPageRoute(builder: (_) => ForumScreen(group: args));
+        }
+        return _errorRoute();
+      case '/channel':
+        if (args is GxsGroup) {
+          return MaterialPageRoute(builder: (_) => ChannelScreen(group: args));
+        }
+        return _errorRoute();
+      case '/forum_thread':
+        if (args is Map<String, dynamic>) {
+          final group = args['group'];
+          final thread = args['thread'];
+          if (group is GxsGroup && thread is ForumThread) {
+            return MaterialPageRoute(
+              builder: (_) => ForumThreadScreen(group: group, thread: thread),
+            );
+          }
+        }
+        return _errorRoute();
       case '/notification':
         return MaterialPageRoute(builder: (_) => const NotificationScreen());
       default:

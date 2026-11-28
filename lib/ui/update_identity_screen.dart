@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/common/avatar_image.dart';
 import 'package:retroshare/common/bottom_bar.dart';
 import 'package:retroshare/common/busy_indicator.dart';
 import 'package:retroshare/common/identicon.dart';
@@ -56,16 +57,19 @@ class UpdateIdentityScreenState extends State<UpdateIdentityScreen> {
     super.dispose();
   }
 
+  /// The picture picked becomes the avatar, at the desktop's size.
   Future<void> _setImage(File? image) async {
     Navigator.pop(context);
-    setState(() {
-
-      if (image != null) {
-        _image = RsGxsImage.fromBytes(image.readAsBytesSync());
-      }
-
-
-    });
+    if (image == null) return;
+    final avatar = await avatarFromFile(image.path);
+    if (!mounted) return;
+    if (avatar == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This picture could not be read.')),
+      );
+      return;
+    }
+    setState(() => _image = RsGxsImage.fromBytes(avatar));
   }
 
   // Validate the Name
@@ -211,7 +215,11 @@ class UpdateIdentityScreenState extends State<UpdateIdentityScreen> {
                                 ),
                                 GestureDetector(
                                   onTap: () {
-                                    imagePickerDialog(context, _setImage);
+                                    imagePickerDialog(
+                                      context,
+                                      _setImage,
+                                      imageQuality: 100,
+                                    );
                                   },
                                   child: Container(
                                     height: 300 * 0.7,
