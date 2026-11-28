@@ -1,17 +1,21 @@
 import 'dart:async';
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
+/// The node's traffic, received and sent kept apart: the speeds now with the
+/// totals since the core started under them, then the same for each service.
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
 
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
 }
+
+/// The columns of the table by service, which can sort it.
+enum _Column { receivedRate, sentRate, received, sent }
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
   static const _friendlyServiceNames = <int, String>{
@@ -41,16 +45,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     0x2003: 'FeedReader',
   };
 
-  static const _chartColors = <Color>[
-    Color(0xFF6750A4),
-    Color(0xFF006A6A),
-    Color(0xFFBA1A1A),
-    Color(0xFF825500),
-    Color(0xFF0061A4),
-    Color(0xFF386A20),
-    Color(0xFF7D5260),
-    Color(0xFF5F5E2B),
-  ];
+  static const _refreshPeriod = Duration(seconds: 5);
 
   Timer? _refreshTimer;
   double _downloadRate = 0;
@@ -58,7 +53,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   double _downloadedBytes = 0;
   double _uploadedBytes = 0;
   List<_ServiceTraffic> _serviceTraffic = const [];
-  int _touchedSection = -1;
+  // The totals by service of the previous refresh, and when it was: each
+  // service's speed is what it received and sent since.
+  Map<int, (double, double)> _previousTotals = const {};
+  DateTime? _previousTime;
+  _Column _sortBy = _Column.received;
   bool _loading = true;
   bool _requestInProgress = false;
   String? _error;
@@ -67,10 +66,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   void initState() {
     super.initState();
     _refresh();
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _refresh(),
-    );
+    _refreshTimer = Timer.periodic(_refreshPeriod, (_) => _refresh());
   }
 
   @override
@@ -101,12 +97,16 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           authToken: authToken,
         ),
       ]);
+      final now = DateTime.now();
       final rawRates = responses[0]['rates'];
       if (rawRates is! Map) throw Exception('Traffic data is unavailable');
-      final serviceNames = _parseServiceNames(responses[2]);
       final serviceTraffic = _parseServiceTraffic(
         responses[1]['stats'],
-        serviceNames,
+        _parseServiceNames(responses[2]),
+        _previousTotals,
+        _previousTime == null
+            ? null
+            : now.difference(_previousTime!).inMilliseconds / 1000,
       );
 
       if (!mounted) return;
@@ -116,6 +116,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _downloadedBytes = _number(rawRates['mTotalIn'] ?? rawRates['totalIn']);
         _uploadedBytes = _number(rawRates['mTotalOut'] ?? rawRates['totalOut']);
         _serviceTraffic = serviceTraffic;
+        _previousTotals = {
+          for (final service in serviceTraffic)
+            service.id: (service.receivedBytes, service.sentBytes),
+        };
+        _previousTime = now;
         _loading = false;
         _error = null;
       });
@@ -165,9 +170,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return result;
   }
 
+  /// The traffic of each service: its totals, and its speeds in kB/s since
+  /// [previous], taken [seconds] ago (no speed without a previous refresh).
   static List<_ServiceTraffic> _parseServiceTraffic(
     Object? rawStats,
     Map<int, String> serviceNames,
+    Map<int, (double, double)> previous,
+    double? seconds,
   ) {
     final result = <_ServiceTraffic>[];
     for (final entry in _mapEntries(rawStats)) {
@@ -176,26 +185,46 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final serviceId = _number(entry.key).toInt();
       final received = _number(stats['bytesIn']);
       final sent = _number(stats['bytesOut']);
-      if (received + sent <= 0) continue;
+      if (received <= 0 && sent <= 0) continue;
+      double? rate(double now, double? before) =>
+          seconds == null || seconds <= 0 || before == null
+              ? null
+              : ((now - before) / 1024 / seconds).clamp(0, double.infinity);
+      final last = previous[serviceId];
       result.add(
         _ServiceTraffic(
+          id: serviceId,
           name: _friendlyServiceNames[serviceId] ??
               serviceNames[serviceId] ??
               'Service 0x${serviceId.toRadixString(16).padLeft(4, '0')}',
           receivedBytes: received,
           sentBytes: sent,
+          receivedRate:
+              rate(received, last?.$1 ?? (seconds == null ? null : 0)),
+          sentRate: rate(sent, last?.$2 ?? (seconds == null ? null : 0)),
         ),
       );
     }
-    result.sort((a, b) => b.totalBytes.compareTo(a.totalBytes));
     return result;
   }
 
+  List<_ServiceTraffic> get _sortedServices {
+    double key(_ServiceTraffic t) => switch (_sortBy) {
+          _Column.receivedRate => t.receivedRate ?? -1,
+          _Column.sentRate => t.sentRate ?? -1,
+          _Column.received => t.receivedBytes,
+          _Column.sent => t.sentBytes,
+        };
+    return [..._serviceTraffic]..sort((a, b) => key(b).compareTo(key(a)));
+  }
+
+  // Speeds and amounts are measures: always two decimals, zero included.
+
   static String _formatRate(double kiloBytesPerSecond) {
     if (kiloBytesPerSecond >= 1024) {
-      return '${(kiloBytesPerSecond / 1024).toStringAsFixed(1)} MB/s';
+      return '${(kiloBytesPerSecond / 1024).toStringAsFixed(2)} MB/s';
     }
-    return '${kiloBytesPerSecond.toStringAsFixed(1)} kB/s';
+    return '${kiloBytesPerSecond.toStringAsFixed(2)} kB/s';
   }
 
   static String _formatBytes(double bytes) {
@@ -206,9 +235,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       value /= 1024;
       unit++;
     }
-    final digits = unit == 0 ? 0 : 1;
+    final digits = unit == 0 ? 0 : 2;
     return '${value.toStringAsFixed(digits)} ${units[unit]}';
   }
+
+  /// A speed in the table: kB/s without the unit, '–' when not known yet.
+  static String _formatTableRate(double? kiloBytesPerSecond) =>
+      kiloBytesPerSecond?.toStringAsFixed(2) ?? '–';
+
+  /// An amount in the table: MB without the unit, so that a column keeps
+  /// one unit.
+  static String _formatTableMegabytes(double bytes) =>
+      (bytes / (1024 * 1024)).toStringAsFixed(2);
 
   @override
   Widget build(BuildContext context) {
@@ -237,7 +275,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         onRefresh: _refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          // Down to above the system navigation bar.
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            16 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             if (_loading)
               const Padding(
@@ -258,8 +302,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 ),
               ),
-            Text('Current traffic', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -267,8 +309,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     context,
                     icon: Icons.arrow_downward_rounded,
                     color: Colors.green,
-                    label: 'Download',
-                    value: _formatRate(_downloadRate),
+                    label: 'Received',
+                    rate: _formatRate(_downloadRate),
+                    total: _formatBytes(_downloadedBytes),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -277,49 +320,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     context,
                     icon: Icons.arrow_upward_rounded,
                     color: Colors.blue,
-                    label: 'Upload',
-                    value: _formatRate(_uploadRate),
+                    label: 'Sent',
+                    rate: _formatRate(_uploadRate),
+                    total: _formatBytes(_uploadedBytes),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 28),
-            Text('Traffic by service', style: theme.textTheme.titleMedium),
+            Text('By service', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
-            _serviceChart(context),
-            const SizedBox(height: 28),
-            Text('Transferred', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(color: theme.colorScheme.outlineVariant),
-              ),
-              child: Column(
-                children: [
-                  _totalTile(
-                    context,
-                    icon: Icons.download_rounded,
-                    color: Colors.green,
-                    label: 'Downloaded',
-                    value: _formatBytes(_downloadedBytes),
-                  ),
-                  const Divider(height: 1, indent: 64),
-                  _totalTile(
-                    context,
-                    icon: Icons.upload_rounded,
-                    color: Colors.blue,
-                    label: 'Uploaded',
-                    value: _formatBytes(_uploadedBytes),
-                  ),
-                ],
-              ),
-            ),
+            _serviceTable(context),
             const SizedBox(height: 12),
             Text(
-              'Rates update every 5 seconds. Transferred values are cumulative '
-              'totals reported by RetroShare Core.',
+              'Speeds over the last ${_refreshPeriod.inSeconds} seconds, in '
+              'kB/s; totals in MB since RetroShare started on this phone. '
+              'Tap a column to sort by it.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -330,7 +346,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _serviceChart(BuildContext context) {
+  Widget _serviceTable(BuildContext context) {
     final theme = Theme.of(context);
     if (_serviceTraffic.isEmpty) {
       return Card(
@@ -347,6 +363,52 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ),
       );
     }
+    final small = theme.textTheme.bodySmall;
+    final dim = theme.colorScheme.onSurfaceVariant;
+
+    // A figure column: right-aligned, on one line, made smaller rather than
+    // wrapped when the text is large, and apart from its left neighbour.
+    Widget figure(Widget child) => Expanded(
+          flex: 3,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: child,
+            ),
+          ),
+        );
+
+    Widget header(String text, _Column column, Color color) {
+      final selected = _sortBy == column;
+      return figure(
+        InkWell(
+          onTap: () => setState(() => _sortBy = column),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              selected ? '$text ▾' : text,
+              maxLines: 1,
+              style: small?.copyWith(
+                color: color,
+                fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget cell(String text) => figure(
+          Text(
+            text,
+            maxLines: 1,
+            style: small?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        );
 
     return Card(
       elevation: 0,
@@ -355,105 +417,45 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
         child: Column(
           children: [
-            SizedBox(
-              height: 240,
-              child: PieChart(
-                PieChartData(
-                  centerSpaceRadius: 48,
-                  sectionsSpace: 2,
-                  pieTouchData: PieTouchData(
-                    touchCallback: (event, response) {
-                      final index =
-                          response?.touchedSection?.touchedSectionIndex ?? -1;
-                      if (index != _touchedSection && mounted) {
-                        setState(() => _touchedSection = index);
-                      }
-                    },
-                  ),
-                  sections: [
-                    for (var index = 0; index < _serviceTraffic.length; index++)
-                      PieChartSectionData(
-                        value: _serviceTraffic[index].totalBytes,
-                        color: _chartColors[index % _chartColors.length],
-                        radius: index == _touchedSection ? 62 : 54,
-                        title: _serviceTraffic[index].percentageOf(
-                          _serviceTraffic.fold(
-                            0,
-                            (sum, item) => sum + item.totalBytes,
-                          ),
-                        ),
-                        titleStyle: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                  ],
-                ),
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOut,
-              ),
-            ),
-            const SizedBox(height: 16),
-            for (var index = 0; index < _serviceTraffic.length; index++)
-              _serviceLegend(context, _serviceTraffic[index], index),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _serviceLegend(
-    BuildContext context,
-    _ServiceTraffic traffic,
-    int index,
-  ) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 12,
-            height: 12,
-            margin: const EdgeInsets.only(top: 3, right: 10),
-            decoration: BoxDecoration(
-              color: _chartColors[index % _chartColors.length],
-              shape: BoxShape.circle,
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
               children: [
-                Text(
-                  traffic.name,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                Expanded(
+                  flex: 6,
+                  child: Text('Service', style: small?.copyWith(color: dim)),
                 ),
-                Text(
-                  '↓ ${_formatBytes(traffic.receivedBytes)}  '
-                  '↑ ${_formatBytes(traffic.sentBytes)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                header('↓ kB/s', _Column.receivedRate, Colors.green),
+                header('↑ kB/s', _Column.sentRate, Colors.blue),
+                header('↓ MB', _Column.received, Colors.green),
+                header('↑ MB', _Column.sent, Colors.blue),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _formatBytes(traffic.totalBytes),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+            const Divider(height: 1),
+            for (final traffic in _sortedServices)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 6,
+                      child: Text(
+                        traffic.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: small?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    cell(_formatTableRate(traffic.receivedRate)),
+                    cell(_formatTableRate(traffic.sentRate)),
+                    cell(_formatTableMegabytes(traffic.receivedBytes)),
+                    cell(_formatTableMegabytes(traffic.sentBytes)),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -463,7 +465,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     required IconData icon,
     required Color color,
     required String label,
-    required String value,
+    required String rate,
+    required String total,
   }) {
     final theme = Theme.of(context);
     return Card(
@@ -473,7 +476,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 22),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
         child: Column(
           children: [
             CircleAvatar(
@@ -481,16 +484,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               foregroundColor: color,
               child: Icon(icon),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Text(label, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 4),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                value,
+                rate,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$total in all',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -498,47 +508,24 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       ),
     );
   }
-
-  Widget _totalTile(
-    BuildContext context, {
-    required IconData icon,
-    required Color color,
-    required String label,
-    required String value,
-  }) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: color.withAlpha(35),
-        foregroundColor: color,
-        child: Icon(icon),
-      ),
-      title: Text(label),
-      trailing: Text(
-        value,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-      ),
-    );
-  }
 }
 
 class _ServiceTraffic {
   const _ServiceTraffic({
+    required this.id,
     required this.name,
     required this.receivedBytes,
     required this.sentBytes,
+    required this.receivedRate,
+    required this.sentRate,
   });
 
+  final int id;
   final String name;
   final double receivedBytes;
   final double sentBytes;
 
-  double get totalBytes => receivedBytes + sentBytes;
-
-  String percentageOf(double total) {
-    if (total <= 0) return '';
-    final percentage = totalBytes / total * 100;
-    return percentage < 3 ? '' : '${percentage.toStringAsFixed(0)}%';
-  }
+  /// kB/s since the previous refresh; null on the first one.
+  final double? receivedRate;
+  final double? sentRate;
 }
