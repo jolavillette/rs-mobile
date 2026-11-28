@@ -7,17 +7,16 @@ import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji_picker;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:retroshare/common/bottom_bar.dart';
+import 'package:retroshare/common/chat_image.dart';
 import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/common/sticker_picker.dart';
 import 'package:retroshare/common/styles.dart';
-import 'package:retroshare/common/upright_image.dart';
 import 'package:retroshare/model/sticker_pack.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/room.dart';
@@ -437,19 +436,15 @@ class MessagesTabState extends State<MessagesTab> {
   }
 
   Future<void> _sendImage() async {
-    final imageXFile = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: widget.isPeerChat ? null : 40,
-      maxWidth: widget.isPeerChat ? null : 250,
-      maxHeight: widget.isPeerChat ? null : 250,
-    );
+    // The photo as it is: the picker's own scaling picks pixels without
+    // smoothing and leaves jagged edges; prepareChatImage() scales it.
+    final imageXFile = await _picker.pickImage(source: ImageSource.gallery);
 
     if (imageXFile == null) {
       debugPrint('Image selection cancelled.');
       return;
     }
 
-    final imageFile = File(imageXFile.path);
     final chatId = widget.chat.chatId;
 
     if (chatId == null) {
@@ -458,38 +453,20 @@ class MessagesTabState extends State<MessagesTab> {
     }
 
     try {
-      final imageBytes =
-          await compute(uprightImage, await imageFile.readAsBytes());
-      final bytes = imageBytes.lengthInBytes;
-      final kb = bytes / 1024;
-      final mb = kb / 1024;
-
-      if (widget.isPeerChat || mb < 3) {
-        final base64Image = base64.encode(imageBytes);
-        final extension = imageXFile.path.split('.').last.toLowerCase();
-        final mimeType = (extension == 'png') ? 'image/png' : 'image/jpeg';
-        final htmlText =
-            "<img alt='Image' src='data:$mimeType;base64,$base64Image'/>";
-
-        if (!mounted) return;
-        await Provider.of<RoomChatLobby>(context, listen: false).sendMessage(
-          chatId,
-          htmlText,
-          (widget.isRoom ?? false)
-              ? ChatIdType.type3
-              : widget.isPeerChat
-                  ? ChatIdType.type1
-                  : ChatIdType.type2,
-        );
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Image Size is too large!'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      final prepared = await _prepareImage(await imageXFile.readAsBytes());
+      if (prepared == null || !mounted) return;
+      final data = base64.encode(prepared.bytes);
+      final htmlText =
+          "<img alt='Image' src='data:${prepared.mimeType};base64,$data'/>";
+      await Provider.of<RoomChatLobby>(context, listen: false).sendMessage(
+        chatId,
+        htmlText,
+        (widget.isRoom ?? false)
+            ? ChatIdType.type3
+            : widget.isPeerChat
+                ? ChatIdType.type1
+                : ChatIdType.type2,
+      );
     } catch (e) {
       debugPrint('Error sending image: $e');
       if (!mounted) return;
@@ -501,6 +478,43 @@ class MessagesTabState extends State<MessagesTab> {
     }
   }
 
+  /// The most bytes an image may take in this chat: a chat room's messages
+  /// have a length limit, the other chats none.
+  int get _imageMaxBytes => (widget.isRoom ?? false) ? roomImageMaxBytes : 0;
+
+  /// [bytes] made ready for this chat as the desktop makes its images
+  /// (prepareChatImage()), or null after telling the user why not.
+  Future<ChatImage?> _prepareImage(Uint8List bytes) async {
+    final prepared = await compute(
+      prepareChatImage,
+      ChatImageRequest(bytes, maxBytes: _imageMaxBytes),
+    );
+    if (prepared == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This image cannot be sent: it cannot be read, or not made '
+            'small enough for a chat room.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+    return prepared;
+  }
+
+  /// Attaches the image [bytes], picked from [file], made ready for this
+  /// chat.
+  Future<void> _attachImageBytes(File file, Uint8List bytes) async {
+    final prepared = await _prepareImage(bytes);
+    if (prepared == null || !mounted) return;
+    setState(() {
+      _attachedImageFile = file;
+      _attachedImageBase64 = base64.encode(prepared.bytes);
+      _attachedImageMimeType = prepared.mimeType;
+    });
+  }
+
   Future<void> _attachImage() async {
     await showModalBottomSheet(
       context: context,
@@ -510,12 +524,8 @@ class MessagesTabState extends State<MessagesTab> {
   }
 
   Future<void> _pickFromCamera() async {
-    final imageXFile = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: widget.isPeerChat ? null : 85,
-      maxWidth: widget.isPeerChat ? null : 1024,
-      maxHeight: widget.isPeerChat ? null : 1024,
-    );
+    // The photo as it is, as _sendImage() takes it.
+    final imageXFile = await _picker.pickImage(source: ImageSource.camera);
     if (imageXFile != null) {
       await _processPickedImage(imageXFile);
     }
@@ -538,22 +548,8 @@ class MessagesTabState extends State<MessagesTab> {
 
       if (isGif) {
         await _attachGif(file, picked.name, bytes);
-      } else if (widget.isPeerChat) {
-        final upright = await compute(uprightImage, bytes);
-        final extension = picked.name.split('.').last.toLowerCase();
-        final mimeType = extension == 'png'
-            ? 'image/png'
-            : extension == 'webp'
-                ? 'image/webp'
-                : 'image/jpeg';
-        if (!mounted) return;
-        setState(() {
-          _attachedImageFile = file;
-          _attachedImageBase64 = base64.encode(upright);
-          _attachedImageMimeType = mimeType;
-        });
       } else {
-        await _processGalleryPhoto(file, bytes);
+        await _attachImageBytes(file, bytes);
       }
     } catch (e) {
       debugPrint('Error selecting gallery image: $e');
@@ -572,79 +568,10 @@ class MessagesTabState extends State<MessagesTab> {
         ascii.decode(bytes.sublist(0, 6), allowInvalid: true) == 'GIF89a';
   }
 
-  Future<void> _processGalleryPhoto(File file, Uint8List sourceBytes) async {
-    final decoded = img.decodeImage(sourceBytes);
-    if (decoded == null) {
-      throw const FormatException('Unsupported image format.');
-    }
-
-    var processed = uprightPixels(decoded);
-    if (processed.width > 1024 || processed.height > 1024) {
-      if (processed.width >= processed.height) {
-        processed = img.copyResize(processed, width: 1024);
-      } else {
-        processed = img.copyResize(processed, height: 1024);
-      }
-    }
-
-    final isPng = file.path.toLowerCase().endsWith('.png');
-    final encoded = isPng
-        ? img.encodePng(processed)
-        : img.encodeJpg(processed, quality: 85);
-    if (encoded.length >= 3 * 1024 * 1024) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Image Size is too large!'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _attachedImageFile = file;
-      _attachedImageBase64 = base64.encode(encoded);
-      _attachedImageMimeType = isPng ? 'image/png' : 'image/jpeg';
-    });
-  }
-
   Future<void> _processPickedImage(XFile imageXFile) async {
     final imageFile = File(imageXFile.path);
-    final chatId = widget.chat.chatId;
-
-    if (chatId == null) {
-      debugPrint('Error: Chat ID is null.');
-      return;
-    }
-
     try {
-      final imageBytes =
-          await compute(uprightImage, await imageFile.readAsBytes());
-      final bytes = imageBytes.lengthInBytes;
-      final kb = bytes / 1024;
-      final mb = kb / 1024;
-
-      if (widget.isPeerChat || mb < 3) {
-        final base64Image = base64.encode(imageBytes);
-        final extension = imageXFile.path.split('.').last.toLowerCase();
-        final mimeType = (extension == 'png') ? 'image/png' : 'image/jpeg';
-
-        setState(() {
-          _attachedImageFile = imageFile;
-          _attachedImageBase64 = base64Image;
-          _attachedImageMimeType = mimeType;
-        });
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Image Size is too large!'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      await _attachImageBytes(imageFile, await imageFile.readAsBytes());
     } catch (e) {
       debugPrint('Error attaching image: $e');
       if (!mounted) return;
