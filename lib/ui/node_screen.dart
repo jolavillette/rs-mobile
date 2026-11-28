@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Preferences > Node, as the desktop's: the profile (the PGP key, the same
 /// on every device of its owner) and this node (the device). Identities are
@@ -18,6 +20,10 @@ class _NodeScreenState extends State<NodeScreen> {
   String _retroshareId = '';
   bool _loadingId = true;
 
+  /// Short: small, enough for a recent RetroShare, easy to scan. Long: the
+  /// whole certificate, with the profile's PGP key.
+  bool _longFormat = false;
+
   @override
   void initState() {
     super.initState();
@@ -30,7 +36,9 @@ class _NodeScreenState extends State<NodeScreen> {
     var id = '';
     if (authToken != null) {
       try {
-        id = await RsPeers.getShortInvite(authToken);
+        id = _longFormat
+            ? (await RsPeers.getOwnCert(authToken)).replaceAll('\n', '')
+            : await RsPeers.getShortInvite(authToken);
       } catch (e) {
         debugPrint('Error fetching the RetroShare ID: $e');
       }
@@ -40,6 +48,39 @@ class _NodeScreenState extends State<NodeScreen> {
       _retroshareId = id;
       _loadingId = false;
     });
+  }
+
+  void _setFormat(bool long) {
+    if (long == _longFormat) return;
+    setState(() {
+      _longFormat = long;
+      _loadingId = true;
+    });
+    _loadRetroshareId();
+  }
+
+  void _showQr() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(_longFormat ? 'Long RetroShare ID' : 'RetroShare ID'),
+        content: SizedBox(
+          width: 280,
+          height: 280,
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(8),
+            child: QrImageView(data: _retroshareId),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -98,12 +139,50 @@ class _NodeScreenState extends State<NodeScreen> {
               shown(account?.locationId),
               Icons.vpn_key,
             ),
+            const SizedBox(height: 16),
+            _sectionTitle(
+              context,
+              'RetroShare ID',
+              'Give it to a friend to be added. Short is enough between '
+                  'recent versions; long carries your whole certificate.',
+            ),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Short')),
+                ButtonSegment(value: true, label: Text('Long')),
+              ],
+              selected: {_longFormat},
+              onSelectionChanged: (s) => _setFormat(s.first),
+            ),
+            const SizedBox(height: 10),
             _infoTile(
               context,
-              'RetroShare ID (give it to a friend to be added)',
+              _longFormat ? 'Long RetroShare ID' : 'Short RetroShare ID',
               _loadingId ? 'Loading...' : shown(_retroshareId),
-              Icons.qr_code,
+              Icons.badge_outlined,
               maxLines: 6,
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _retroshareId.isEmpty
+                        ? null
+                        : () => SharePlus.instance
+                            .share(ShareParams(text: _retroshareId)),
+                    icon: const Icon(Icons.share),
+                    label: const Text('Share'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _retroshareId.isEmpty ? null : _showQr,
+                    icon: const Icon(Icons.qr_code),
+                    label: const Text('QR code'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

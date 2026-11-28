@@ -23,6 +23,10 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> {
   String _ownId = '';
 
+  /// Short: small and easy to scan. Long: the whole certificate, with the
+  /// profile's PGP key, so the friend knows who it is before any connection.
+  bool _longFormat = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,11 +38,22 @@ class _HomeTabState extends State<HomeTab> {
         Provider.of<AccountCredentials>(context, listen: false).authtoken;
     if (authToken == null) return;
     try {
-      final id = await RsPeers.getShortInvite(authToken);
+      final id = _longFormat
+          ? (await RsPeers.getOwnCert(authToken)).replaceAll('\n', '')
+          : await RsPeers.getShortInvite(authToken);
       if (mounted) setState(() => _ownId = id);
     } catch (e) {
       debugPrint('Cannot get my RetroShare ID: $e');
     }
+  }
+
+  void _setFormat(bool long) {
+    if (long == _longFormat) return;
+    setState(() {
+      _longFormat = long;
+      _ownId = '';
+    });
+    _loadOwnId();
   }
 
   Future<void> _copy() async {
@@ -63,10 +78,12 @@ class _HomeTabState extends State<HomeTab> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('My RetroShare ID'),
+        title: Text(
+          _longFormat ? 'My long RetroShare ID' : 'My RetroShare ID',
+        ),
         content: SizedBox(
-          width: 260,
-          height: 260,
+          width: 280,
+          height: 280,
           child: QrImageView(
             data: _ownId,
             backgroundColor: Colors.white,
@@ -141,6 +158,18 @@ class _HomeTabState extends State<HomeTab> {
         ),
         const SizedBox(height: RsScale.s5),
         question('This is your RetroShare ID. Copy and share with your friends!'),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('Short')),
+              ButtonSegment(value: true, label: Text('Long')),
+            ],
+            selected: {_longFormat},
+            onSelectionChanged: (s) => _setFormat(s.first),
+          ),
+        ),
+        const SizedBox(height: RsScale.s2),
         Container(
           padding: const EdgeInsets.all(RsScale.s3),
           decoration: BoxDecoration(
@@ -151,6 +180,7 @@ class _HomeTabState extends State<HomeTab> {
           child: ready
               ? SelectableText(
                   _ownId,
+                  maxLines: _longFormat ? 6 : null,
                   style: TextStyle(
                     fontFamily: RsScale.fontMono,
                     fontSize: RsScale.tMeta,

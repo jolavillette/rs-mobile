@@ -18,6 +18,17 @@ Future<void> showAddFriendDialog(BuildContext context) async {
   await _confirmAndAdd(context, invite.trim());
 }
 
+/// Whether [link] is a RetroShare link that carries a friend's ID or
+/// certificate.
+bool isFriendLink(String link) {
+  final l = link.trim().toLowerCase();
+  return l.startsWith('retroshare://certificate') || l.contains('rsinvite=');
+}
+
+/// Shows who a tapped friend link is, then adds them on confirmation.
+Future<void> addFriendFromLink(BuildContext context, String link) =>
+    _confirmAndAdd(context, link.trim());
+
 class _PasteIdDialog extends StatefulWidget {
   const _PasteIdDialog();
 
@@ -139,10 +150,17 @@ Future<Map<String, dynamic>?> _inviteDetails(
 /// The ID itself, as the web UI cleans it: what follows "rsInvite=" in a
 /// link, URL-decoded.
 String _cleanId(String value) {
-  final input = value.trim();
+  var input = value.trim();
+  // A desktop certificate link carries the certificate in "radix".
+  if (input.toLowerCase().startsWith('retroshare://certificate')) {
+    final radix = Uri.tryParse(input)?.queryParameters['radix'];
+    if (radix != null && radix.isNotEmpty) return radix.trim();
+  }
   const marker = 'rsInvite=';
   final at = input.indexOf(marker);
-  final id = at >= 0 ? input.substring(at + marker.length) : input;
+  var id = at >= 0 ? input.substring(at + marker.length) : input;
+  final amp = at >= 0 ? id.indexOf('&') : -1;
+  if (amp >= 0) id = id.substring(0, amp);
   try {
     return Uri.decodeComponent(id).trim();
   } catch (_) {

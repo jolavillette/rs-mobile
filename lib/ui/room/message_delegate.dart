@@ -7,12 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/nickname_color.dart';
 import 'package:retroshare/provider/room.dart';
+import 'package:retroshare/ui/home/add_friend_dialog.dart';
 import 'package:retroshare/ui/room/voice_message_widget.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:video_player/video_player.dart';
@@ -392,12 +392,17 @@ class MessageDelegate extends StatelessWidget {
       return match.group(0) ?? '';
     });
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onLongPress: () => _copyMessageText(context, content),
+    // A long press selects text, with Android's own Copy / Select all / Share
+    // menu, as in any messenger.
+    return SelectionArea(
       child: Html(
         data: processedContent,
         shrinkWrap: true,
+        onLinkTap: (url, attributes, element) {
+          if (url != null && isFriendLink(url)) {
+            addFriendFromLink(context, url);
+          }
+        },
         extensions: [
         TagExtension(
           tagsToExtend: {'img'},
@@ -546,39 +551,6 @@ class MessageDelegate extends StatelessWidget {
     );
   }
 
-  Future<void> _copyMessageText(BuildContext context, String html) async {
-    final hasHtmlTags = RegExp(
-      r'</?(?:a|br|font|img|p|span)\b[^>]*>',
-      caseSensitive: false,
-    ).hasMatch(html);
-    final text = hasHtmlTags
-        ? html_parser
-                .parse(
-                  html
-                      .replaceAll(
-                        RegExp(r'<br\s*/?>', caseSensitive: false),
-                        '\n',
-                      )
-                      .replaceAll(
-                        RegExp(r'</p\s*>', caseSensitive: false),
-                        '\n',
-                      ),
-                )
-                .body
-                ?.text ??
-            ''
-        : html;
-    if (text.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: text));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Message copied'),
-        duration: Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 }
 
 class BubblePainter extends CustomPainter {
