@@ -20,6 +20,7 @@ abstract final class RsServiceTypes {
   static const int serviceInfo = 0x0020;
   static const int bandwidthControl = 0x0021;
   static const int gxsTunnels = 0x0028;
+  static const int mobileLink = 0x0029;
   static const int banList = 0x0101;
   static const int status = 0x0102;
   static const int identities = 0x0211;
