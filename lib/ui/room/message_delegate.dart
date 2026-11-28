@@ -10,6 +10,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/common/nickname_color.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/ui/home/add_friend_dialog.dart';
 import 'package:retroshare/ui/room/voice_message_widget.dart';
@@ -87,11 +88,17 @@ class MessageDelegate extends StatelessWidget {
     required this.data,
     required this.bubbleTitle,
     this.style = BubbleStyle.bubble,
+    this.colourByAuthor = false,
   });
 
   final String bubbleTitle;
   final ChatMessage data;
   final BubbleStyle style;
+
+  /// In a chat room: the others' bubbles and names take the colour of their
+  /// nickname, as the desktop colours the nicknames, instead of one colour
+  /// for all of them.
+  final bool colourByAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -128,6 +135,10 @@ class MessageDelegate extends StatelessWidget {
     if (isSystem) {
       bubbleColor = const Color(0xFFFFD43D);
       borderColor = const Color(0xFFC9A200);
+    } else if (isIncoming && colourByAuthor) {
+      final colours = nicknameBubbleColors(bubbleTitle);
+      bubbleColor = colours.fill;
+      borderColor = colours.border;
     } else if (isIncoming) {
       bubbleColor = context.rs.selectSoft;
       borderColor = context.rs.brand;
@@ -315,7 +326,10 @@ class MessageDelegate extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.onSurface,
+            color: colourByAuthor && !rightOfBubble
+                ? nicknameColor(
+                    title, Theme.of(context).scaffoldBackgroundColor)
+                : Theme.of(context).colorScheme.onSurface,
           ),
         ),
       ],

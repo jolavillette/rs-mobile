@@ -12,19 +12,41 @@ Color nicknameColor(
   Color background, {
   double desiredContrast = 4.5,
 }) {
+  final color =
+      HSVColor.fromAHSV(1, nicknameHue(name), 1, 150 / 255).toColor();
+  return _findBestColor(
+    color,
+    background.computeLuminance(),
+    desiredContrast,
+  );
+}
+
+/// The hue of [name], in degrees, from the desktop's hash of the name.
+double nicknameHue(String name) {
   var hash = 0;
   for (final unit in name.codeUnits) {
     // QChar::toLatin1() gives 0 outside Latin-1, and a signed char inside.
     final latin1 = unit > 0xff ? 0 : (unit >= 0x80 ? unit - 0x100 : unit);
     hash = (((hash << 1) + (hash >> 14)) ^ latin1) & 0x3fff;
   }
-  final color =
-      HSVColor.fromAHSV(1, (hash % 360).toDouble(), 1, 150 / 255).toColor();
-  return _findBestColor(
-    color,
-    background.computeLuminance(),
-    desiredContrast,
-  );
+  return (hash % 360).toDouble();
+}
+
+/// The fill and border of [name]'s message bubbles in a chat room, in the
+/// hue of its nickname. The fill is as vivid as the green of my own
+/// bubbles, made lighter only where black text would lack contrast (blues
+/// and purples); the border is the dark shade of the same hue.
+({Color fill, Color border}) nicknameBubbleColors(String name) {
+  final hue = nicknameHue(name);
+  var lightness = 0.62;
+  var fill = HSLColor.fromAHSL(1, hue, 1, lightness).toColor();
+  // Contrast 6 with black text.
+  while (fill.computeLuminance() < 0.25 && lightness < 0.95) {
+    lightness += 0.01;
+    fill = HSLColor.fromAHSL(1, hue, 1, lightness).toColor();
+  }
+  final border = HSLColor.fromAHSL(1, hue, 1, 0.35).toColor();
+  return (fill: fill, border: border);
 }
 
 double _contrast(double lum1, double lum2) =>
