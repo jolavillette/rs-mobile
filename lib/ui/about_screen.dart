@@ -43,7 +43,7 @@ class AboutScreenState extends State<AboutScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('About'),
+        title: const Text('Web Help'),
       ),
       body: IndexedStack(
         index: _stackToView,

@@ -198,7 +198,7 @@ class _HomeTabState extends State<HomeTab> {
           child: OutlinedButton.icon(
             icon: const Icon(Icons.public),
             label: const Text('Open Web Help'),
-            onPressed: () => widget.open('/about'),
+            onPressed: () => widget.open('/web_help'),
           ),
         ),
       ],

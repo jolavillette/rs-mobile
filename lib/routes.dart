@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:retroshare/ui/about_retroshare_screen.dart';
 import 'package:retroshare/ui/about_screen.dart';
+import 'package:retroshare/ui/appearance_screen.dart';
 import 'package:retroshare/ui/add_friend/add_friend_screen.dart';
 import 'package:retroshare/ui/change_identity_screen.dart';
 import 'package:retroshare/ui/chat_settings_screen.dart';
@@ -144,6 +146,10 @@ class RouteGenerator {
       case '/chat_settings':
         return MaterialPageRoute(builder: (_) => const ChatSettingsScreen());
       case '/about':
+        return MaterialPageRoute(builder: (_) => const AboutRetroShareScreen());
+      case '/appearance':
+        return MaterialPageRoute(builder: (_) => const AppearanceScreen());
+      case '/web_help':
         return MaterialPageRoute(builder: (_) => const AboutScreen());
       case '/notification':
         return MaterialPageRoute(builder: (_) => const NotificationScreen());
