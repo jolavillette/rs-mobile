@@ -17,11 +17,14 @@ class AboutRetroShareScreen extends StatefulWidget {
 }
 
 class _AboutRetroShareScreenState extends State<AboutRetroShareScreen> {
-  // The commits built in, passed by the build script (--dart-define); empty
-  // for a build made elsewhere.
+  // What was built, passed by the build script (--dart-define) as
+  // <commits>-g<commit> for each part; empty for a build made elsewhere.
   static const _mobileGit = String.fromEnvironment('RS_MOBILE_GIT');
   static const _wrapperGit = String.fromEnvironment('RS_WRAPPER_GIT');
   static const _libGit = String.fromEnvironment('RS_LIB_GIT');
+
+  // The build's date, which is also the version Android shows.
+  static const _build = String.fromEnvironment('RS_VERSION');
 
   /// (name, version) rows, in display order.
   List<(String, String)> _versions = [];
@@ -66,16 +69,17 @@ class _AboutRetroShareScreenState extends State<AboutRetroShareScreen> {
     if (!mounted) return;
     setState(() {
       _versions = [
+        if (_build.isNotEmpty) ('Build', _build),
+        // A build made elsewhere has no reference to show: it falls back
+        // to the versions the package and the core give.
         (
           'RetroShare Mobile',
-          '${package.version} (build ${package.buildNumber})'
-              '${_mobileGit.isEmpty ? '' : ', git $_mobileGit'}',
+          _mobileGit.isNotEmpty
+              ? _mobileGit
+              : '${package.version} (build ${package.buildNumber})',
         ),
-        (
-          'libretroshare',
-          '$core${_libGit.isEmpty ? '' : ' (git $_libGit)'}',
-        ),
-        if (_wrapperGit.isNotEmpty) ('Retroshare-Wrapper', 'git $_wrapperGit'),
+        ('libretroshare', _libGit.isNotEmpty ? _libGit : core),
+        if (_wrapperGit.isNotEmpty) ('Retroshare-Wrapper', _wrapperGit),
         ('Android', Platform.operatingSystemVersion),
         ('Dart', Platform.version.split(' ').first),
       ];

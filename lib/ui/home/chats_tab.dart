@@ -70,6 +70,10 @@ class _OpenChat {
 
 class _ChatsTabState extends State<ChatsTab> {
   String _search = '';
+
+  /// The rooms to join start folded, as the desktop's room list: the page
+  /// opens on the user's own chats and rooms. A search unfolds them.
+  bool _publicFolded = true;
   List<_Invite> _invites = [];
   int _inviteCount = -1;
 
@@ -592,8 +596,35 @@ class _ChatsTabState extends State<ChatsTab> {
                     ),
                 ],
                 if (public.isNotEmpty) ...[
-                  section(Icons.public, 'Public (${public.length})'),
-                  for (final room in public)
+                  InkWell(
+                    onTap: () =>
+                        setState(() => _publicFolded = !_publicFolded),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: section(
+                            Icons.public,
+                            'Public (${public.length})',
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            top: RsScale.s3,
+                            right: RsScale.s4,
+                          ),
+                          child: Icon(
+                            _publicFolded && _search.isEmpty
+                                ? Icons.expand_more
+                                : Icons.expand_less,
+                            size: 20,
+                            color: rs.inkDim,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!_publicFolded || _search.isNotEmpty)
+                    for (final room in public)
                     ListTile(
                       leading: const Icon(Icons.public),
                       title: Text(room.lobbyName ?? '<unnamed>'),
