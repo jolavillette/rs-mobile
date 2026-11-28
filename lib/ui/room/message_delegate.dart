@@ -212,22 +212,28 @@ class MessageDelegate extends StatelessWidget {
       );
     }
 
+    // As in every messenger: my messages on the right, the others' and the
+    // system's on the left.
+    final mine = !isIncoming && !isSystem;
+
     // Custom RetroShare Bubble Look
     if (style == BubbleStyle.bubble) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
         child: Row(
-          mainAxisAlignment: (isIncoming || isSystem)
-              ? MainAxisAlignment.end
-              : MainAxisAlignment.start,
+          mainAxisAlignment:
+              mine ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
-            if (!isIncoming && !isSystem) ...[
-              _buildLabel(
-                context,
-                bubbleTitle,
-                formattedTime,
-                isIncoming,
-              ),
+            if (!mine) ...[
+              if (isSystem)
+                _buildSystemLabel(context, bubbleTitle, formattedTime)
+              else
+                _buildLabel(
+                  context,
+                  bubbleTitle,
+                  formattedTime,
+                  rightOfBubble: false,
+                ),
               const SizedBox(width: 4),
             ],
             Flexible(
@@ -235,7 +241,7 @@ class MessageDelegate extends StatelessWidget {
                 painter: BubblePainter(
                   color: bubbleColor,
                   borderColor: borderColor,
-                  isIncoming: isIncoming,
+                  beakOnRight: mine,
                   isSystem: isSystem,
                 ),
                 child: Container(
@@ -249,17 +255,14 @@ class MessageDelegate extends StatelessWidget {
                 ),
               ),
             ),
-            if ((isIncoming || isSystem) && !(!isIncoming && !isSystem)) ...[
+            if (mine) ...[
               const SizedBox(width: 4),
-              if (isSystem)
-                _buildSystemLabel(context, bubbleTitle, formattedTime)
-              else
-                _buildLabel(
-                  context,
-                  bubbleTitle,
-                  formattedTime,
-                  isIncoming,
-                ),
+              _buildLabel(
+                context,
+                bubbleTitle,
+                formattedTime,
+                rightOfBubble: true,
+              ),
             ],
           ],
         ),
@@ -269,13 +272,12 @@ class MessageDelegate extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
         child: Column(
-          crossAxisAlignment: (isIncoming || isSystem)
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
+          crossAxisAlignment:
+              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (isIncoming || isSystem)
+            if (!mine)
               Padding(
-                padding: const EdgeInsets.only(bottom: 4, right: 8),
+                padding: const EdgeInsets.only(bottom: 4, left: 8),
                 child: Text(
                   isSystem
                       ? '$bubbleTitle - $formattedTime'
@@ -292,16 +294,14 @@ class MessageDelegate extends StatelessWidget {
             Row(
               mainAxisAlignment: isSystem
                   ? MainAxisAlignment.center
-                  : (isIncoming
-                      ? MainAxisAlignment.end
-                      : MainAxisAlignment.start),
+                  : (mine ? MainAxisAlignment.end : MainAxisAlignment.start),
               children: [
                 Flexible(
                   child: CustomPaint(
                     painter: BubblePainter(
                       color: bubbleColor,
                       borderColor: borderColor,
-                      isIncoming: isIncoming,
+                      beakOnRight: mine,
                       isSystem: isSystem,
                     ),
                     child: Container(
@@ -317,9 +317,9 @@ class MessageDelegate extends StatelessWidget {
                 ),
               ],
             ),
-            if (!isIncoming && !isSystem)
+            if (mine)
               Padding(
-                padding: const EdgeInsets.only(top: 4, left: 8),
+                padding: const EdgeInsets.only(top: 4, right: 8),
                 child: Text(
                   '$bubbleTitle - $formattedTime',
                   style: TextStyle(
@@ -361,15 +361,16 @@ class MessageDelegate extends StatelessWidget {
     );
   }
 
+  /// The author and time beside a bubble, aligned on the bubble's side.
   Widget _buildLabel(
     BuildContext context,
     String title,
-    String time,
-    bool isIncoming,
-  ) {
+    String time, {
+    required bool rightOfBubble,
+  }) {
     return Column(
       crossAxisAlignment:
-          isIncoming ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+          rightOfBubble ? CrossAxisAlignment.start : CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
@@ -584,12 +585,14 @@ class BubblePainter extends CustomPainter {
   BubblePainter({
     required this.color,
     required this.borderColor,
-    required this.isIncoming,
+    required this.beakOnRight,
     this.isSystem = false,
   });
   final Color color;
   final Color borderColor;
-  final bool isIncoming;
+
+  /// The beak points right, for a bubble on the right (my messages).
+  final bool beakOnRight;
   final bool isSystem;
 
   @override
@@ -615,7 +618,7 @@ class BubblePainter extends CustomPainter {
           const Radius.circular(radius),
         ),
       );
-    } else if (isIncoming) {
+    } else if (beakOnRight) {
       // Beak on the right
       path.moveTo(radius, 0);
       path.lineTo(size.width - radius - beakWidth, 0);
