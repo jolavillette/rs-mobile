@@ -6,11 +6,12 @@ import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/manual/manual_screen.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
-/// Every service the core runs, in four groups: those the app needs (shown,
-/// not switchable), those it works without (on; turning one off asks for
-/// confirmation), those the app has no page for (off; the app turns them
-/// off at every login, turning one on here asks for confirmation and is
-/// remembered for this node), and any other service the core reports.
+/// Every service the core runs, in five groups: those the app needs (shown,
+/// not switchable), those it can work without (on; turning one off asks for
+/// confirmation), the optional services the app has a page for and those it
+/// has no page for (off; the app turns them off at every login, turning one
+/// on here asks for confirmation and is remembered for this node), and any
+/// other service the core reports.
 class MobileServicesSettingsScreen extends StatefulWidget {
   const MobileServicesSettingsScreen({super.key});
 
@@ -70,8 +71,9 @@ class _MobileServicesSettingsScreenState
         title: Text('Turn on ${service.name}?'),
         content: Text(
           '${service.role}\n\n'
-          'RetroShare Mobile cannot show it yet. Turned on, it makes this '
-          'phone use more CPU, mobile data, battery and storage.',
+          '${servicesWithPage.contains(service.type) ? '' : 'RetroShare Mobile cannot show it yet. '}'
+          'Turned on, it makes this phone use more CPU, mobile data, battery '
+          'and storage.',
         ),
         actions: [
           TextButton(
@@ -149,6 +151,8 @@ class _MobileServicesSettingsScreenState
         neededServices.where((s) => _coreServices.containsKey(s.type));
     final optional =
         optionalServices.where((s) => _coreServices.containsKey(s.type));
+    final withPage = optional.where((s) => servicesWithPage.contains(s.type));
+    final noPage = optional.where((s) => !servicesWithPage.contains(s.type));
     final switchable =
         switchableServices.where((s) => _coreServices.containsKey(s.type));
     final listed = {
@@ -178,10 +182,10 @@ class _MobileServicesSettingsScreenState
               children: [
                 Text(
                   'Every service the RetroShare core runs on this phone. The '
-                  'services the app has no page for are off: they would use '
-                  'CPU, mobile data, battery and storage for nothing you can '
-                  'see. The app turns them off at every start, except the '
-                  'ones you turn on here.',
+                  'services the app does not need are off: they use CPU, '
+                  'mobile data, battery and storage. The app turns them off '
+                  'at every start, except the ones you turn on here or from '
+                  'their page (Forums, Channels).',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -191,12 +195,16 @@ class _MobileServicesSettingsScreenState
                   [for (final s in needed) _statusTile(s.name, s.role, s.type)],
                 ),
                 _section(
-                  'The app works without',
+                  'The app can work without',
                   [for (final s in switchable) _serviceSwitch(s)],
                 ),
                 _section(
+                  'Off unless you turn them on',
+                  [for (final s in withPage) _serviceSwitch(s)],
+                ),
+                _section(
                   'No page in the app',
-                  [for (final s in optional) _serviceSwitch(s)],
+                  [for (final s in noPage) _serviceSwitch(s)],
                 ),
                 if (others.isNotEmpty)
                   _section('Other services', [
