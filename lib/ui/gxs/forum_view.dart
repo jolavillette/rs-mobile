@@ -10,9 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// The three views of the desktop's forum page.
 enum ForumView {
-  threaded('Threaded view'),
-  flat('Flat view'),
-  latestPost('Latest post in thread');
+  threaded('Threaded'),
+  flat('Flat'),
+  latestPost('Latest post');
 
   const ForumView(this.label);
 
@@ -334,23 +334,6 @@ class _ForumViewScreenState extends State<ForumViewScreen> {
             icon: Icon(_showDetails ? Icons.info : Icons.info_outline),
             onPressed: () => setState(() => _showDetails = !_showDetails),
           ),
-          PopupMenuButton<ForumView>(
-            tooltip: 'View',
-            icon: Icon(
-              _view == ForumView.flat
-                  ? Icons.view_agenda_outlined
-                  : Icons.account_tree_outlined,
-            ),
-            onSelected: _setView,
-            itemBuilder: (context) => [
-              for (final view in ForumView.values)
-                CheckedPopupMenuItem(
-                  value: view,
-                  checked: view == _view,
-                  child: Text(view.label),
-                ),
-            ],
-          ),
           GxsGroupMenu(
             content: _content,
             groupId: widget.group.id,
@@ -361,6 +344,31 @@ class _ForumViewScreenState extends State<ForumViewScreen> {
             },
           ),
         ],
+        // The desktop's three views, always in sight above the posts.
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(52),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              RsScale.s3,
+              0,
+              RsScale.s3,
+              RsScale.s2,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<ForumView>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final view in ForumView.values)
+                    // Words only: three fit on the narrowest phone.
+                    ButtonSegment(value: view, label: Text(view.label)),
+                ],
+                selected: {_view},
+                onSelectionChanged: (views) => _setView(views.first),
+              ),
+            ),
+          ),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
