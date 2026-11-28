@@ -154,7 +154,38 @@ class AccountCredentials with ChangeNotifier {
     return _authToken == null ? false : RsJsonApi.isAuthTokenValid(_authToken!);
   }
 
+  /// Whether the core already runs [account] and [password] opens it: the
+  /// app then only takes its place back in front of it.
+  ///
+  /// Android destroys the app's screen in the background while the service
+  /// keeps the core running. Logging in again used to stop and restart that
+  /// core: half a minute offline, the chat rooms left and joined again, and
+  /// what the friends had kept for the phone delivered to a core that was
+  /// not ready for it, so lost.
+  Future<bool> _attachToRunningCore(Account account, String password) async {
+    try {
+      if (!await RsLoginHelper.checkLoggedIn()) return false;
+      final token = AuthToken(
+        account.pgpName,
+        deriveApiToken(account.pgpName, password),
+      );
+      if (!await RsJsonApi.isAuthTokenValid(token)) return false;
+      final running = await RsAccounts.getCurrentAccountId(token);
+      if (running != account.locationId) return false;
+      if (!await getinitializeAuth(account, password)) return false;
+      _pgpPassword = password;
+      logginAccount = account;
+      notifyListeners();
+      debugPrint('Login: attached to the running core, no restart');
+      return true;
+    } catch (e) {
+      debugPrint('Login: cannot attach to the running core: $e');
+      return false;
+    }
+  }
+
   Future<void> login(Account currentAccount, String password) async {
+    if (await _attachToRunningCore(currentAccount, password)) return;
     await _restartBackendIfLoggedIn();
     final int resp = await RsLoginHelper.requestLogIn(
       currentAccount,
