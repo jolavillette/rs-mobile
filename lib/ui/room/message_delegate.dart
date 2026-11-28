@@ -96,7 +96,16 @@ class MessageDelegate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeStampMillis = (data.recvTime ?? data.sendTime ?? 0) * 1000;
+    // The time the author sent it, as on the desktop: a line a friend kept
+    // while the phone slept arrives minutes or hours later, and showed the
+    // time of its arrival. A send time ahead of the arrival (a wrong clock
+    // on the author's side) falls back on the arrival.
+    final sent = data.sendTime ?? 0;
+    final received = data.recvTime ?? 0;
+    final shown = sent > 0 && (received == 0 || sent <= received + 600)
+        ? sent
+        : received;
+    final timeStampMillis = shown * 1000;
     final messageTime = DateTime.fromMillisecondsSinceEpoch(timeStampMillis);
     final formattedTime =
         '${messageTime.hour.toString().padLeft(2, '0')}:${messageTime.minute.toString().padLeft(2, '0')}';
