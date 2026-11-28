@@ -1089,6 +1089,17 @@ class MessagesTabState extends State<MessagesTab> {
                 final ownIdentity = identitiesProvider.currentIdentity;
                 final interlocutorIdentity =
                     messagesList.allIdentity[widget.chat.interlocutorId];
+                // In a room I appear as the identity chosen for that room,
+                // which may not be the active one.
+                final roomIdentityId = widget.isRoom == true
+                    ? messagesList.roomIdentity(widget.chat.chatId ?? '')
+                    : null;
+                final roomOwnName = identitiesProvider.ownIdentity
+                        .where((id) => id.mId == roomIdentityId)
+                        .firstOrNull
+                        ?.name ??
+                    ownIdentity?.name ??
+                    'Me';
 
                 return Stack(
                   children: <Widget>[
@@ -1108,10 +1119,9 @@ class MessagesTabState extends State<MessagesTab> {
                         if (isSystem) {
                           bubbleTitle = 'Status';
                         } else if (widget.isRoom ?? false) {
-                          if (message.incoming ?? false) {
-                            bubbleTitle =
-                                messagesList.getChatSenderName(message);
-                          }
+                          bubbleTitle = (message.incoming ?? false)
+                              ? messagesList.getChatSenderName(message)
+                              : roomOwnName;
                         } else {
                           // 1:1 Chat nicknames
                           if (message.incoming ?? false) {

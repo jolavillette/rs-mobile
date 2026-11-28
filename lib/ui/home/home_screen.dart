@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/eventsource.dart';
 import 'package:retroshare/common/badge_helper.dart';
-import 'package:retroshare/common/drawer.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare/provider/room.dart';
@@ -15,6 +14,7 @@ import 'package:retroshare/ui/home/more_tab.dart';
 import 'package:retroshare/ui/home/network_tab.dart';
 import 'package:retroshare/ui/home/people_tab.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Chat, Location;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 
 const double _desktopBreakpoint = 840;
@@ -30,6 +30,9 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   // The bottom navigation of the web UI: Home, Network, People, Chat, More.
   static const _chatTab = 3;
+  static const _tabCount = 5;
+  // The tab the app was on when it was left, opened again at start.
+  static const _tabKey = 'home_tab';
   int _tab = _chatTab;
   bool _desktop = false;
   bool _isInit = true;
@@ -64,6 +67,7 @@ class HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _isInit = true;
+    _restoreTab();
 
     // Start periodic invite check
     _inviteCheckTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
@@ -84,6 +88,28 @@ class HomeScreenState extends State<HomeScreen> {
     }
     _isInit = false;
     super.didChangeDependencies();
+  }
+
+  /// Opens the tab the app was on when it was left; Chat the first time.
+  Future<void> _restoreTab() async {
+    try {
+      final saved = (await SharedPreferences.getInstance()).getInt(_tabKey);
+      if (saved != null && saved >= 0 && saved < _tabCount && mounted) {
+        setState(() => _tab = saved);
+      }
+    } catch (e) {
+      debugPrint('Cannot read the last tab: $e');
+    }
+  }
+
+  void _selectTab(int tab) {
+    setState(() => _tab = tab);
+    SharedPreferences.getInstance()
+        .then((prefs) => prefs.setInt(_tabKey, tab))
+        .catchError((Object e) {
+      debugPrint('Cannot keep the tab: $e');
+      return false;
+    });
   }
 
   void _updateAppBadge() {
@@ -200,61 +226,30 @@ class HomeScreenState extends State<HomeScreen> {
 
   static const _titles = ['Home', 'Network', 'People', 'Chat', 'More'];
 
-  List<Widget> _actions() {
-    switch (_tab) {
-      case _chatTab:
-        return [
-          IconButton(
-            tooltip: 'Search',
-            icon: const Icon(Icons.search),
-            onPressed: () => _open('/search', arguments: 0),
-          ),
-          IconButton(
-            tooltip: 'Public chat rooms',
-            icon: const Icon(Icons.public),
-            onPressed: () => _open('/discover_chats'),
-          ),
-          IconButton(
-            tooltip: 'Invitations',
-            icon: const NotificationIcon(),
-            onPressed: () => _open('/notification'),
-          ),
-        ];
-      default:
-        return const [];
-    }
-  }
-
-  Widget? _fab() {
-    switch (_tab) {
-      case _chatTab:
-        return FloatingActionButton(
-          tooltip: 'New chat room',
-          onPressed: () => _open('/create_room'),
-          child: const Icon(Icons.add_comment_outlined),
-        );
-      default:
-        return null;
-    }
-  }
-
-  Widget _chatIcon(bool selected) {
+  /// A navigation icon with the count of what is unread behind it, as the
+  /// web UI badges its menu: open chats, rooms and invitations on Chat,
+  /// direct chats on Network too.
+  Widget _badged(IconData icon, int Function(ChatLobby, RoomChatLobby) count) {
     return Consumer2<ChatLobby, RoomChatLobby>(
       builder: (context, chatLobby, roomChatLobby, _) {
-        final unread = chatLobby.subscribedlist
-                .fold(0, (sum, chat) => sum + chat.unreadCount) +
-            roomChatLobby.distantUnreadCount +
-            roomChatLobby.peerUnreadCount +
-            chatLobby.pendingInviteCount;
-        final icon = Icon(selected ? Icons.forum : Icons.forum_outlined);
-        if (unread == 0) return icon;
+        final unread = count(chatLobby, roomChatLobby);
+        if (unread == 0) return Icon(icon);
         return Badge(
           label: Text(unread > 99 ? '99+' : '$unread'),
-          child: icon,
+          child: Icon(icon),
         );
       },
     );
   }
+
+  static int _chatUnread(ChatLobby chatLobby, RoomChatLobby roomChatLobby) =>
+      chatLobby.subscribedlist.fold(0, (sum, chat) => sum + chat.unreadCount) +
+      chatLobby.pendingInviteCount +
+      roomChatLobby.distantUnreadCount +
+      roomChatLobby.peerUnreadCount;
+
+  static int _peerUnread(ChatLobby _, RoomChatLobby roomChatLobby) =>
+      roomChatLobby.peerUnreadCount;
 
   Widget _buildHomeScaffold({required bool desktop}) {
     _desktop = desktop;
@@ -264,7 +259,6 @@ class HomeScreenState extends State<HomeScreen> {
         // The root of the app: nothing to go back to.
         automaticallyImplyLeading: false,
         title: Text(_titles[_tab]),
-        actions: _actions(),
       ),
       body: Stack(
         children: [
@@ -281,6 +275,7 @@ class HomeScreenState extends State<HomeScreen> {
                 onOpenRoom: desktop ? _openRoom : null,
               ),
               ChatsTab(
+                open: _open,
                 onOpenRoom: desktop ? _openRoom : null,
                 onOpenPeerChat: desktop ? _openPeerChat : null,
               ),
@@ -298,19 +293,18 @@ class HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      floatingActionButton: _fab(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: _selectTab,
         destinations: [
           const NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.share_outlined),
-            selectedIcon: Icon(Icons.share),
+          NavigationDestination(
+            icon: _badged(Icons.share_outlined, _peerUnread),
+            selectedIcon: _badged(Icons.share, _peerUnread),
             label: 'Network',
           ),
           const NavigationDestination(
@@ -319,8 +313,8 @@ class HomeScreenState extends State<HomeScreen> {
             label: 'People',
           ),
           NavigationDestination(
-            icon: _chatIcon(false),
-            selectedIcon: _chatIcon(true),
+            icon: _badged(Icons.forum_outlined, _chatUnread),
+            selectedIcon: _badged(Icons.forum, _chatUnread),
             label: 'Chat',
           ),
           const NavigationDestination(

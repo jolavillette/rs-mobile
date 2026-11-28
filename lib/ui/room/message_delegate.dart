@@ -11,6 +11,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/common/nickname_color.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/ui/room/voice_message_widget.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
@@ -136,77 +137,49 @@ class MessageDelegate extends StatelessWidget {
     }
 
     if (isLobby) {
-      // Keep standard Material design for group rooms
-      return FractionallySizedBox(
-        alignment: isSystem
-            ? Alignment.centerRight
-            : (isIncoming ? Alignment.centerLeft : Alignment.centerRight),
-        widthFactor: 0.7,
-        child: Card(
-          color: isSystem
-              ? bubbleColor
-              : (!isIncoming
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Theme.of(context).colorScheme.secondaryContainer),
-          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              if (bubbleTitle.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(left: 12, top: 8, right: 8),
+      // As the desktop's chat rooms: no frame around the messages, the
+      // author's name in a colour of their own and the time beside it, the
+      // message below.
+      final theme = Theme.of(context);
+      final dimmed = theme.colorScheme.onSurface.withOpacity(0.6);
+      final nameColor = isSystem
+          ? dimmed
+          : nicknameColor(bubbleTitle, theme.scaffoldBackgroundColor);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: <Widget>[
+                Flexible(
                   child: Text(
                     bubbleTitle,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: isSystem
-                          ? Colors.black87
-                          : (!isIncoming
-                              ? Theme.of(context).colorScheme.onPrimaryContainer
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSecondaryContainer),
-                      fontSize: 12,
+                      color: nameColor,
+                      fontSize: 13,
                     ),
                   ),
                 ),
-              Stack(
-                children: <Widget>[
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: 12,
-                      right: isSystem ? 12 : 45,
-                      bottom: 8,
-                      top: bubbleTitle.isNotEmpty ? 4 : 10,
-                    ),
-                    child: _buildHtmlContent(
-                        context, messageContent, isIncoming,
-                        textColor: isSystem ? Colors.black : null),
-                  ),
-                  if (!isSystem)
-                    Positioned(
-                      right: 8,
-                      bottom: 4,
-                      child: Text(
-                        formattedTime,
-                        style: TextStyle(
-                          color: !isIncoming
-                              ? Theme.of(context)
-                                  .colorScheme
-                                  .onPrimaryContainer
-                                  .withOpacity(0.6)
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSecondaryContainer
-                                  .withOpacity(0.6),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Text(
+                  formattedTime,
+                  style: TextStyle(color: dimmed, fontSize: 11),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            _buildHtmlContent(
+              context,
+              messageContent,
+              isIncoming,
+              textColor: isSystem ? dimmed : theme.colorScheme.onSurface,
+            ),
+          ],
         ),
       );
     }

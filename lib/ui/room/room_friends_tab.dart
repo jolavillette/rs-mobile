@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
-import 'package:retroshare/common/person_delegate.dart';
+import 'package:retroshare/common/identity_avatar.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
+/// The participants of a room, as the desktop lists them: any of them can be
+/// chatted with privately (a distant chat, whether the identity is a contact
+/// or not), added to or removed from the contacts, or looked at.
 class RoomFriendsTab extends StatefulWidget {
   const RoomFriendsTab({super.key, required this.chat});
   final Chat chat;
@@ -14,23 +16,7 @@ class RoomFriendsTab extends StatefulWidget {
 }
 
 class RoomFriendsTabState extends State<RoomFriendsTab> {
-  // Use late final if only assigned in initState
-  late final Image myImage;
   Future<void>? _participantsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    myImage = Image.asset('assets/icons8/friends_together.png');
-
-    // Precache image after the first frame
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      // Check mounted state before accessing context
-      if (mounted) {
-        precacheImage(myImage.image, context);
-      }
-    });
-  }
 
   @override
   void didChangeDependencies() {
@@ -43,189 +29,175 @@ class RoomFriendsTabState extends State<RoomFriendsTab> {
     }
   }
 
-  // Keep this method if needed by showCustomMenu or other interactions
-  void _addToContacts(String gxsId) {
-    // Consider adding error handling for the provider call
+  /// Opens a distant chat with [participant], from the active identity.
+  Future<void> _startPrivateChat(Identity participant) async {
+    final current =
+        Provider.of<Identities>(context, listen: false).currentIdentity;
+    if (current == null) return;
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      Provider.of<RoomChatLobby>(context, listen: false)
-          .toggleContacts(gxsId, true);
-      // Optionally show confirmation
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Added to contacts')),
+      final chat = await Provider.of<RoomChatLobby>(context, listen: false)
+          .getChat(current, participant);
+      if (chat == null || !mounted) return;
+      await Navigator.pushNamed(
+        context,
+        '/room',
+        arguments: {'isRoom': false, 'chatData': chat},
       );
     } catch (e) {
-      debugPrint('Error adding contact: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add contact: $e')),
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not start a private chat: $e')),
       );
     }
   }
 
-  @override
-  void dispose() {
-    super.dispose();
+  Future<void> _setContact(Identity participant, bool isContact) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await Provider.of<RoomChatLobby>(context, listen: false)
+          .toggleContacts(participant.mId, isContact);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            isContact ? 'Added to contacts.' : 'Removed from contacts.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('The contact list could not be changed.')),
+      );
+    }
+  }
+
+  void _showActions(Identity participant) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: IdentityAvatar(identity: participant),
+              title: Text(
+                participant.name ?? participant.mId,
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.chat_bubble_outline),
+              title: const Text('Start private chat'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _startPrivateChat(participant);
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                participant.isContact
+                    ? Icons.person_remove_outlined
+                    : Icons.person_add_alt,
+              ),
+              title: Text(
+                participant.isContact
+                    ? 'Remove from contacts'
+                    : 'Add to contacts',
+              ),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _setContact(participant, !participant.isContact);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('View details'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.pushNamed(
+                  context,
+                  '/profile',
+                  arguments: {'id': participant},
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Check chat ID validity early
     final chatId = widget.chat.chatId;
     if (chatId == null) {
       return const Center(child: Text('Error: Invalid chat room.'));
     }
 
-    // 4. Use FutureBuilder to ensure participants are loaded
     return FutureBuilder(
       future: _participantsFuture,
       builder: (context, snapshot) {
-        // 4. Handle error state
         if (snapshot.hasError) {
           return Center(
             child: Text('Error loading participants: ${snapshot.error}'),
           );
         }
-        // Show loading indicator while waiting
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        // Use Consumer to get the latest participant list after future completes
         return Consumer<RoomChatLobby>(
           builder: (context, lobbyData, _) {
-            // 5. Simplify participant list retrieval
-            final participantsMap = lobbyData.lobbyParticipants;
-            final participantList = participantsMap[chatId] ?? [];
-            final currentIdentity = Provider.of<Identities>(context, listen: false).currentIdentity;
-
-            // Show empty state or list
-            return participantList.isEmpty
-                ? Center(
-                    child: SizedBox(
-                      width: 200,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: <Widget>[
-                          // 9. Ensure myImage is displayed correctly
-                          myImage,
-                          const SizedBox(height: 20),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 5),
-                            child: Text(
-                              'Looks like an empty space',
-                              // Use theme
-                              style: Theme.of(context).textTheme.bodyLarge,
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 5),
-                            child: Text(
-                              'You can invite your friends',
-                              // Use theme
-                              style: Theme.of(context).textTheme.bodyLarge,
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          const SizedBox(height: 50),
-                        ],
-                      ),
+            final participants = lobbyData.lobbyParticipants[chatId] ?? [];
+            final currentIdentity =
+                Provider.of<Identities>(context, listen: false).currentIdentity;
+            final text = Theme.of(context).textTheme;
+            if (participants.isEmpty) {
+              return Center(
+                child: Text(
+                  'No participant yet.\nYou can invite your friends.',
+                  textAlign: TextAlign.center,
+                  style: text.bodyLarge,
+                ),
+              );
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              // The first row names the list, as the web UI's
+              // Participants (n).
+              itemCount: participants.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      'Participants (${participants.length})',
+                      style: text.titleSmall,
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    // 6. Simplify itemCount
-                    itemCount: participantList.length,
-                    itemBuilder: (BuildContext context, int index) {
-                      // 6. Access is safe now assuming participantList is non-null List
-                      final participant = participantList[index];
-                      final isMe = currentIdentity?.mId == participant.mId;
-
-                      return PersonDelegate(
-                        // Pass non-nullable participant
-                        data: PersonDelegateData.identityData(
-                          participant,
-                          context,
-                        ),
-                        onAvatarPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/profile',
-                            arguments: {'id': participant},
-                          );
-                        },
-                        // 7. Ensure showCustomMenu is defined and safe
-                        onLongPress: isMe ? null : (Offset tapPosition) {
-                          showCustomMenu(
-                            participant.isContact
-                                ? 'Remove from contacts'
-                                : 'Add to contacts',
-                            Icon(
-                                participant.isContact
-                                    ? Icons.person_remove
-                                    : Icons.person_add,
-                                color: Theme.of(context).colorScheme.onSurface,),
-                            () {
-                              Provider.of<RoomChatLobby>(context, listen: false)
-                                  .toggleContacts(
-                                      participant.mId, !participant.isContact,);
-                            },
-                            tapPosition,
-                            context,
-                            additionalActions: [
-                              (
-                                title: 'View Details',
-                                icon: Icon(Icons.info_outline,
-                                    color:
-                                        Theme.of(context).colorScheme.onSurface,),
-                                action: () {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/profile',
-                                    arguments: {'id': participant},
-                                  );
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                        // 8. Add basic error handling/check for navigation
-                        onPressed: isMe ? null : () async {
-                            try {
-                              final curr = Provider.of<Identities>(
-                                context,
-                                listen: false,
-                              ).currentIdentity;
-                              if (curr == null) {
-                                return;
-                              }
-                              // Ensure current identity and participant are valid
-                              final chatData = await Provider.of<RoomChatLobby>(
-                                context,
-                                listen: false,
-                              ).getChat(curr, participant);
-
-                              if (chatData == null) return;
-
-                              if (!context.mounted) return;
-                              await Navigator.pushNamed(
-                                context,
-                                '/room',
-                                arguments: {
-                                  'isRoom': false,
-                                  'chatData': chatData,
-                                },
-                              );
-                            } catch (e) {
-                              debugPrint(
-                                'Error navigating to participant chat: $e',
-                              );
-                              // Optionally show error to user
-                            }
-                          },
-                      );
-                    },
                   );
+                }
+                final participant = participants[index - 1];
+                final isMe = currentIdentity?.mId == participant.mId;
+                return ListTile(
+                  leading: IdentityAvatar(identity: participant),
+                  title: Text(participant.name ?? participant.mId),
+                  subtitle: Text(
+                    isMe
+                        ? 'You'
+                        : participant.isContact
+                            ? 'Contact'
+                            : 'Identity',
+                  ),
+                  trailing: isMe
+                      ? null
+                      : IconButton(
+                          tooltip: 'Start private chat',
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          onPressed: () => _startPrivateChat(participant),
+                        ),
+                  onTap: isMe ? null : () => _showActions(participant),
+                );
+              },
+            );
           },
         );
       },
