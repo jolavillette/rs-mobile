@@ -38,7 +38,10 @@ Future<void> initializeNotifications() async {
   const initializationSettingsAndroid =
       AndroidInitializationSettings('@drawable/ic_stat_retroshare');
   const initializationSettings =
-      InitializationSettings(android: initializationSettingsAndroid);
+      InitializationSettings(
+    android: initializationSettingsAndroid,
+    iOS: DarwinInitializationSettings(),
+  );
   await flutterLocalNotificationsPlugin.initialize(
     settings: initializationSettings,
     onDidReceiveNotificationResponse:
