@@ -15,6 +15,7 @@ import 'package:retroshare/ui/home/home_screen.dart';
 import 'package:retroshare/ui/launch_transition_screen.dart';
 import 'package:retroshare/ui/mobile_services_settings_screen.dart';
 import 'package:retroshare/ui/network_settings_screen.dart';
+import 'package:retroshare/ui/node_screen.dart';
 import 'package:retroshare/ui/notification_screen.dart';
 import 'package:retroshare/ui/profile_screen.dart';
 import 'package:retroshare/ui/room/room_screen.dart';
@@ -139,6 +140,8 @@ class RouteGenerator {
         return MaterialPageRoute(
           builder: (_) => const MobileServicesSettingsScreen(),
         );
+      case '/node':
+        return MaterialPageRoute(builder: (_) => const NodeScreen());
       case '/settings':
         return MaterialPageRoute(builder: (_) => const SettingsScreen());
       case '/statistics':

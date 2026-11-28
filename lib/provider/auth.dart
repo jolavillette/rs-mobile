@@ -164,7 +164,7 @@ class AccountCredentials with ChangeNotifier {
       params: {
         'locationId': '',
         'pgpId': '',
-        'locationName': nodename.isEmpty ? 'mobile' : nodename,
+        'locationName': nodename,
         'pgpName': username,
         'password': password,
         'apiUser': username,
@@ -177,7 +177,7 @@ class AccountCredentials with ChangeNotifier {
       Account(
         locationId: resp['locationId'],
         pgpId: resp['pgpId'],
-        locationName: username,
+        locationName: nodename,
         pgpName: username,
       ),
     );
@@ -227,7 +227,7 @@ class AccountCredentials with ChangeNotifier {
   Future<void> importIdentityAndCreateLocation(
     String pgpKeyContent,
     String password, {
-    String nodeName = 'mobile',
+    required String nodeName,
   }) async {
     try {
       await _restartBackendIfLoggedIn();
@@ -248,7 +248,7 @@ class AccountCredentials with ChangeNotifier {
         );
       }
 
-      final locationName = nodeName.trim().isEmpty ? 'mobile' : nodeName.trim();
+      final locationName = nodeName.trim();
       final apiUser = 'mobile-$pgpId';
       final apiPass = deriveApiToken(apiUser, password);
       final createResp = await rsApiCall(

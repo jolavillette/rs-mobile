@@ -27,15 +27,15 @@ class SignUpScreenState extends State<SignUpScreen> {
   TextEditingController repeatPasswordController = TextEditingController();
   TextEditingController nodeNameController = TextEditingController();
 
-  bool advancedOption = false;
   bool isUsernameCorrect = true;
+  bool isNodeNameCorrect = true;
   PasswordError passwordError = PasswordError.correct;
 
   @override
   void initState() {
     super.initState();
-    advancedOption = false;
     isUsernameCorrect = true;
+    isNodeNameCorrect = true;
     passwordError = PasswordError.correct;
   }
 
@@ -50,12 +50,12 @@ class SignUpScreenState extends State<SignUpScreen> {
 
   Future<void> createAccount() async {
     var success = true;
-    if (usernameController.text.length < 3) {
-      setState(() {
-        isUsernameCorrect = false;
-      });
-      success = false;
-    }
+    setState(() {
+      isUsernameCorrect = usernameController.text.trim().length >= 3;
+      isNodeNameCorrect = nodeNameController.text.trim().isNotEmpty;
+      passwordError = PasswordError.correct;
+    });
+    if (!isUsernameCorrect || !isNodeNameCorrect) success = false;
     if (passwordController.text != repeatPasswordController.text) {
       setState(() {
         passwordError = PasswordError.notTheSame;
@@ -89,7 +89,7 @@ class SignUpScreenState extends State<SignUpScreen> {
           .signup(
         usernameController.text,
         passwordController.text,
-        nodeNameController.text,
+        nodeNameController.text.trim(),
       )
           .then((value) {
         final ids = Provider.of<Identities>(context, listen: false);
@@ -163,7 +163,7 @@ class SignUpScreenState extends State<SignUpScreen> {
   Widget _buildUsernameField() {
     return _buildTextField(
       controller: usernameController,
-      hintText: 'Username',
+      hintText: 'Profile name (you)',
       icon: Icons.person_outline,
     );
   }
@@ -189,7 +189,7 @@ class SignUpScreenState extends State<SignUpScreen> {
   Widget _buildNodeNameField() {
     return _buildTextField(
       controller: nodeNameController,
-      hintText: 'Node name',
+      hintText: 'Node name (this device)',
       icon: Icons.smartphone,
     );
   }
@@ -210,7 +210,14 @@ class SignUpScreenState extends State<SignUpScreen> {
 
   Widget _buildUsernameError() {
     if (!isUsernameCorrect) {
-      return _buildErrorText('Username is too short');
+      return _buildErrorText('Profile name is too short');
+    }
+    return const SizedBox(height: 10);
+  }
+
+  Widget _buildNodeNameError() {
+    if (!isNodeNameCorrect) {
+      return _buildErrorText('Give this node a name');
     }
     return const SizedBox(height: 10);
   }
@@ -229,57 +236,6 @@ class SignUpScreenState extends State<SignUpScreen> {
     return const SizedBox(height: 10);
   }
 
-  Widget _buildAdvancedOptionsToggle() {
-    return SizedBox(
-      width: double.infinity,
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            advancedOption = !advancedOption;
-          });
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          height: 45,
-          child: Row(
-            children: <Widget>[
-              Checkbox(
-                value: advancedOption,
-                onChanged: (bool? value) {
-                  setState(() {
-                    advancedOption = value ?? false;
-                  });
-                },
-              ),
-              const SizedBox(width: 3),
-              Text(
-                'Advanced option',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdvancedOptionsFields() {
-    return Visibility(
-      visible: advancedOption,
-      child: Column(
-        children: [
-          const SizedBox(height: 10),
-          _buildNodeNameField(),
-          const SizedBox(height: 10),
-          _buildImportButton(context),
-        ],
-      ),
-    );
-  }
-
   Widget _buildImportButton(BuildContext context) {
     return TextButton(
       onPressed: () => _showImportDialog(context),
@@ -290,7 +246,7 @@ class SignUpScreenState extends State<SignUpScreen> {
               color: Theme.of(context).colorScheme.primary, size: 20),
           const SizedBox(width: 8),
           Text(
-            'Import existing account',
+            'Import an existing profile',
             style: TextStyle(
               color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.bold,
@@ -311,13 +267,13 @@ class SignUpScreenState extends State<SignUpScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Import Account'),
+          title: const Text('Import a profile'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Import an exported RetroShare profile (.asc) and create a new mobile node using its existing PGP key.',
+                  'Import an exported RetroShare profile (.asc) and create a new node for it on this device.',
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
@@ -346,6 +302,14 @@ class SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 16),
                 TextField(
+                  controller: nodeNameController,
+                  decoration: const InputDecoration(
+                    hintText: 'Node name (this device)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
                   controller: passController,
                   obscureText: true,
                   decoration: const InputDecoration(
@@ -366,7 +330,8 @@ class SignUpScreenState extends State<SignUpScreen> {
                   ? null
                   : () async {
                       if (certController.text.isEmpty ||
-                          passController.text.isEmpty) {
+                          passController.text.isEmpty ||
+                          nodeNameController.text.trim().isEmpty) {
                         showToast('Please fill all fields');
                         return;
                       }
@@ -380,7 +345,7 @@ class SignUpScreenState extends State<SignUpScreen> {
                         await authProvider.importIdentityAndCreateLocation(
                           rawContent,
                           passController.text,
-                          nodeName: nodeNameController.text,
+                          nodeName: nodeNameController.text.trim(),
                         );
 
                         if (!context.mounted) return;
@@ -476,14 +441,16 @@ class SignUpScreenState extends State<SignUpScreen> {
                 _buildLogo(),
                 _buildUsernameField(),
                 _buildUsernameError(),
+                _buildNodeNameField(),
+                _buildNodeNameError(),
                 _buildPasswordField(),
                 _buildPasswordError(),
                 _buildRepeatPasswordField(),
                 _buildRepeatPasswordError(),
-                _buildAdvancedOptionsToggle(),
-                _buildAdvancedOptionsFields(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 _buildCreateAccountButton(),
+                const SizedBox(height: 10),
+                _buildImportButton(context),
                 const SizedBox(height: 70),
               ],
             ),
