@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji_picker;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -16,6 +17,7 @@ import 'package:retroshare/common/bottom_bar.dart';
 import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/common/sticker_picker.dart';
 import 'package:retroshare/common/styles.dart';
+import 'package:retroshare/common/upright_image.dart';
 import 'package:retroshare/model/sticker_pack.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/room.dart';
@@ -456,7 +458,8 @@ class MessagesTabState extends State<MessagesTab> {
     }
 
     try {
-      final imageBytes = await imageFile.readAsBytes();
+      final imageBytes =
+          await compute(uprightImage, await imageFile.readAsBytes());
       final bytes = imageBytes.lengthInBytes;
       final kb = bytes / 1024;
       final mb = kb / 1024;
@@ -536,6 +539,7 @@ class MessagesTabState extends State<MessagesTab> {
       if (isGif) {
         await _attachGif(file, picked.name, bytes);
       } else if (widget.isPeerChat) {
+        final upright = await compute(uprightImage, bytes);
         final extension = picked.name.split('.').last.toLowerCase();
         final mimeType = extension == 'png'
             ? 'image/png'
@@ -545,7 +549,7 @@ class MessagesTabState extends State<MessagesTab> {
         if (!mounted) return;
         setState(() {
           _attachedImageFile = file;
-          _attachedImageBase64 = base64.encode(bytes);
+          _attachedImageBase64 = base64.encode(upright);
           _attachedImageMimeType = mimeType;
         });
       } else {
@@ -574,12 +578,12 @@ class MessagesTabState extends State<MessagesTab> {
       throw const FormatException('Unsupported image format.');
     }
 
-    var processed = decoded;
-    if (decoded.width > 1024 || decoded.height > 1024) {
-      if (decoded.width >= decoded.height) {
-        processed = img.copyResize(decoded, width: 1024);
+    var processed = uprightPixels(decoded);
+    if (processed.width > 1024 || processed.height > 1024) {
+      if (processed.width >= processed.height) {
+        processed = img.copyResize(processed, width: 1024);
       } else {
-        processed = img.copyResize(decoded, height: 1024);
+        processed = img.copyResize(processed, height: 1024);
       }
     }
 
@@ -616,7 +620,8 @@ class MessagesTabState extends State<MessagesTab> {
     }
 
     try {
-      final imageBytes = await imageFile.readAsBytes();
+      final imageBytes =
+          await compute(uprightImage, await imageFile.readAsBytes());
       final bytes = imageBytes.lengthInBytes;
       final kb = bytes / 1024;
       final mb = kb / 1024;
