@@ -435,49 +435,6 @@ class MessagesTabState extends State<MessagesTab> {
     }
   }
 
-  Future<void> _sendImage() async {
-    // The photo as it is: the picker's own scaling picks pixels without
-    // smoothing and leaves jagged edges; prepareChatImage() scales it.
-    final imageXFile = await _picker.pickImage(source: ImageSource.gallery);
-
-    if (imageXFile == null) {
-      debugPrint('Image selection cancelled.');
-      return;
-    }
-
-    final chatId = widget.chat.chatId;
-
-    if (chatId == null) {
-      debugPrint('Error: Chat ID is null.');
-      return;
-    }
-
-    try {
-      final prepared = await _prepareImage(await imageXFile.readAsBytes());
-      if (prepared == null || !mounted) return;
-      final data = base64.encode(prepared.bytes);
-      final htmlText =
-          "<img alt='Image' src='data:${prepared.mimeType};base64,$data'/>";
-      await Provider.of<RoomChatLobby>(context, listen: false).sendMessage(
-        chatId,
-        htmlText,
-        (widget.isRoom ?? false)
-            ? ChatIdType.type3
-            : widget.isPeerChat
-                ? ChatIdType.type1
-                : ChatIdType.type2,
-      );
-    } catch (e) {
-      debugPrint('Error sending image: $e');
-      if (!mounted) return;
-      await errorShowDialog(
-        'Error Sending Image',
-        'Could not send the image: $e',
-        context,
-      );
-    }
-  }
-
   /// The most bytes an image may take in this chat: a chat room's messages
   /// have a length limit, the other chats none.
   int get _imageMaxBytes => (widget.isRoom ?? false) ? roomImageMaxBytes : 0;
@@ -645,6 +602,9 @@ class MessagesTabState extends State<MessagesTab> {
                       await _pickFile();
                     },
                   ),
+                  // Not in a room: a GIF goes as it is, and a room
+                  // message has a size limit.
+                  if (!(widget.isRoom ?? false))
                   _buildPickerOption(
                     icon: Icons.gif_box_rounded,
                     color: Colors.purple,
@@ -1453,17 +1413,12 @@ class MessagesTabState extends State<MessagesTab> {
                           ),
                         ),
                         IconButton(
-                          icon: Icon(
-                            (widget.isRoom ?? false)
-                                ? Icons.image
-                                : Icons.attach_file_rounded,
-                          ),
-                          tooltip: (widget.isRoom ?? false)
-                              ? 'Send image'
-                              : 'Attach file',
-                          onPressed: (widget.isRoom ?? false)
-                              ? _sendImage
-                              : _attachImage,
+                          // The same choices in a room as in a private
+                          // chat: a file is posted as a RetroShare download
+                          // link, an image inside the message.
+                          icon: const Icon(Icons.attach_file_rounded),
+                          tooltip: 'Attach file',
+                          onPressed: _attachImage,
                         ),
                         ListenableBuilder(
                           listenable: msgController,
