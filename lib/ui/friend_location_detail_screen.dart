@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:retroshare/provider/auth.dart';
+import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:share_plus/share_plus.dart';
 
 class FriendLocationDetailScreen extends StatefulWidget {
   const FriendLocationDetailScreen({super.key, required this.location});
@@ -15,10 +20,20 @@ class FriendLocationDetailScreen extends StatefulWidget {
 
 class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen> {
   bool _isLoading = true;
-  String _localIP = 'Loading...';
-  String _localPort = 'Loading...';
-  String _externalIP = 'Loading...';
-  String _externalPort = 'Loading...';
+
+  /// RsPeerDetails of the node, as rsPeers/getPeerDetails returns it; empty
+  /// until loaded, or when the core does not know the node.
+  Map<String, dynamic> _det = const {};
+  String _version = '';
+
+  /// The node's RetroShare ID (short invite): what another node pastes or
+  /// scans to add it as a friend.
+  String _retroshareId = '';
+  bool _connecting = false;
+
+  /// Short: small and easy to scan. Long: the whole certificate, with the
+  /// friend's PGP key.
+  bool _longFormat = false;
 
   Future<void> _openChat() async {
     final peerId = widget.location.rsPeerId;
@@ -34,58 +49,331 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
   @override
   void initState() {
     super.initState();
-    _fetchPeerConnectionDetails();
+    _fetchPeerDetails();
+    // The buttons follow the node's state: read it again while the page
+    // is open.
+    _refresh = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !_connecting) _fetchPeerDetails();
+    });
   }
 
-  Future<void> _fetchPeerConnectionDetails() async {
-    try {
-      final authProvider = Provider.of<AccountCredentials>(context, listen: false);
-      final authToken = authProvider.authtoken;
-      if (authToken != null && widget.location.rsPeerId.isNotEmpty) {
-        final peerDetailsResponse = await rsApiCall(
+  Timer? _refresh;
+
+  @override
+  void dispose() {
+    _refresh?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchPeerDetails() async {
+    final authToken =
+        Provider.of<AccountCredentials>(context, listen: false).authtoken;
+    final peerId = widget.location.rsPeerId;
+    var det = const <String, dynamic>{};
+    var version = '';
+    var retroshareId = '';
+    if (authToken != null && peerId.isNotEmpty) {
+      try {
+        final res = await rsApiCall(
           '/rsPeers/getPeerDetails',
           authToken: authToken,
-          params: {'sslId': widget.location.rsPeerId},
+          params: {'sslId': peerId},
         );
-        final det = peerDetailsResponse['det'] as Map? ?? {};
-        
-        final localAddr = det['mLocalAddr'] ?? det['localAddr'] ?? 'Unknown';
-        final localPort = det['mLocalPort']?.toString() ?? det['localPort']?.toString() ?? 'Unknown';
-        final extAddr = det['mExtAddr'] ?? det['extAddr'] ?? 'Unknown';
-        final extPort = det['mExtPort']?.toString() ?? det['extPort']?.toString() ?? 'Unknown';
-
-        if (mounted) {
-          setState(() {
-            _localIP = localAddr;
-            _localPort = localPort;
-            _externalIP = extAddr;
-            _externalPort = extPort;
-            _isLoading = false;
-          });
+        if (res['retval'] == true && res['det'] is Map) {
+          det = Map<String, dynamic>.from(res['det'] as Map);
         }
-      } else {
-        if (mounted) {
-          setState(() {
-            _localIP = '—';
-            _localPort = '—';
-            _externalIP = '—';
-            _externalPort = '—';
-            _isLoading = false;
-          });
-        }
+      } catch (e) {
+        debugPrint('Error fetching peer details: $e');
       }
-    } catch (e) {
-      debugPrint('Error fetching peer details: $e');
-      if (mounted) {
-        setState(() {
-          _localIP = '—';
-          _localPort = '—';
-          _externalIP = '—';
-          _externalPort = '—';
-          _isLoading = false;
-        });
+      // The state first: the buttons depend on it, and must not wait for
+      // the version and the RetroShare ID, which may take long or never
+      // come for a node that is away.
+      if (!mounted) return;
+      setState(() {
+        _det = det;
+        _isLoading = false;
+      });
+      try {
+        final res = await rsApiCall(
+          '/rsGossipDiscovery/getPeerVersion',
+          authToken: authToken,
+          params: {'id': peerId},
+        );
+        if (res['retval'] == true) version = res['version']?.toString() ?? '';
+      } catch (e) {
+        debugPrint('Error fetching peer version: $e');
+      }
+      try {
+        if (_longFormat) {
+          final res = await rsApiCall(
+            '/rsPeers/GetRetroshareInvite',
+            authToken: authToken,
+            params: {'sslId': peerId},
+          );
+          retroshareId =
+              (res['retval']?.toString() ?? '').replaceAll('\n', '');
+        } else {
+          final res = await rsApiCall(
+            '/rsPeers/GetShortInvite',
+            authToken: authToken,
+            params: {'sslId': peerId},
+          );
+          final invite = res['invite']?.toString() ?? '';
+          // The core answers with a link; the ID is its rsInvite parameter.
+          final key = Uri.tryParse(invite)?.queryParameters['rsInvite'];
+          retroshareId = key != null ? Uri.decodeComponent(key) : invite;
+        }
+      } catch (e) {
+        debugPrint('Error fetching the RetroShare ID: $e');
       }
     }
+    if (!mounted) return;
+    setState(() {
+      _det = det;
+      _version = version;
+      _retroshareId = retroshareId;
+      _isLoading = false;
+    });
+  }
+
+  /// The desktop's "Attempt to connect": asks the core to dial the node now,
+  /// then reads its state again while the attempt runs.
+  Future<void> _attemptToConnect() async {
+    final authToken =
+        Provider.of<AccountCredentials>(context, listen: false).authtoken;
+    final peerId = widget.location.rsPeerId;
+    if (authToken == null || peerId.isEmpty || _connecting) return;
+    setState(() => _connecting = true);
+    try {
+      await rsApiCall(
+        '/rsPeers/connectAttempt',
+        authToken: authToken,
+        params: {'sslId': peerId},
+      );
+    } catch (e) {
+      debugPrint('Error asking for a connection attempt: $e');
+    }
+    for (final wait in const [2, 4, 6]) {
+      await Future<void>.delayed(Duration(seconds: wait));
+      if (!mounted) return;
+      await _fetchPeerDetails();
+    }
+    if (mounted) setState(() => _connecting = false);
+  }
+
+  /// Removes this node only, or the friend with all their nodes, as the
+  /// desktop's "Remove Friend Node" and "Remove Friend". Asks first.
+  Future<void> _remove({required bool wholeFriend}) async {
+    final authToken =
+        Provider.of<AccountCredentials>(context, listen: false).authtoken;
+    final friends = Provider.of<FriendLocations>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final name = widget.location.accountName.isNotEmpty
+        ? widget.location.accountName
+        : 'this friend';
+    final node = widget.location.locationName.isNotEmpty
+        ? widget.location.locationName
+        : 'this node';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(wholeFriend ? 'Remove friend' : 'Remove node'),
+        content: Text(
+          wholeFriend
+              ? 'Remove $name and all their nodes from your friends? '
+                  'You will need their RetroShare ID to add them again.'
+              : 'Remove the node "$node" of $name? Their other nodes stay.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || authToken == null) return;
+    var removed = false;
+    try {
+      final res = wholeFriend
+          ? await rsApiCall(
+              '/rsPeers/removeFriend',
+              authToken: authToken,
+              params: {'pgpId': widget.location.rsGpgId},
+            )
+          : await rsApiCall(
+              '/rsPeers/removeFriendLocation',
+              authToken: authToken,
+              params: {'sslId': widget.location.rsPeerId},
+            );
+      removed = res['retval'] == true;
+    } catch (e) {
+      debugPrint('Error removing a friend: $e');
+    }
+    if (!removed) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not remove it.')),
+      );
+      return;
+    }
+    await friends.fetchfriendLocation();
+    navigator.pop();
+  }
+
+  bool get _connected {
+    final state = _int('connectState');
+    return state >= 4 || (_det.isEmpty && widget.location.isOnline);
+  }
+
+  void _setFormat(bool long) {
+    if (long == _longFormat) return;
+    setState(() => _longFormat = long);
+    _fetchPeerDetails();
+  }
+
+  void _showRetroshareIdQr() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          widget.location.locationName.isNotEmpty
+              ? widget.location.locationName
+              : 'RetroShare ID',
+        ),
+        content: SizedBox(
+          width: 280,
+          height: 280,
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(8),
+            child: QrImageView(data: _retroshareId),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _str(String key) => _det[key]?.toString() ?? '';
+  int _int(String key) {
+    final v = _det[key];
+    if (v is num) return v.toInt();
+    // 64-bit integers come as {"xint64": n, "xstr64": "n"}
+    if (v is Map && v['xint64'] is num) return (v['xint64'] as num).toInt();
+    return 0;
+  }
+
+  bool _bool(String key) => _det[key] == true;
+
+  /// The desktop's connection status line (StatusDefs::connectStateString):
+  /// how the link is made and in which direction, the core's own detail
+  /// (address tried, failure), and whether the DHT found the node.
+  String _connectionStatus() {
+    if (_det.isEmpty) {
+      return widget.location.isOnline ? 'Connected' : 'Not connected';
+    }
+    var s = '';
+    var connected = false;
+    switch (_int('connectState')) {
+      case 2:
+        s = 'Trying TCP';
+      case 3:
+        s = 'Trying UDP';
+      case 4:
+        s = 'Connected: TCP';
+        connected = true;
+      case 5:
+        s = 'Connected: UDP';
+        connected = true;
+      case 6:
+        s = 'Connected: Tor';
+        connected = true;
+      case 7:
+        s = 'Connected: I2P';
+        connected = true;
+      case 8:
+        s = 'Connected: Unknown';
+        connected = true;
+      default:
+        final state = _int('state');
+        if (state & 0x4 != 0) {
+          s = 'Connected';
+        } else if (state & 0x8 != 0) {
+          s = 'Unreachable';
+        } else if (state & 0x2 != 0) {
+          s = 'Available';
+        } else if (state & 0x1 != 0) {
+          s = 'Offline';
+        } else {
+          s = 'Neighbor';
+        }
+    }
+    if (connected) {
+      s += _bool('actAsServer')
+          ? ' inbound connection'
+          : ' outbound connection';
+    }
+    final extra = _str('connectStateString');
+    if (extra.isNotEmpty) s = s.isEmpty ? extra : '$s: $extra';
+    if (_bool('foundDHT')) s = s.isEmpty ? 'DHT: Contact' : '$s, DHT: Contact';
+    return s;
+  }
+
+  String _lastContact() {
+    final ts = _int('lastConnect');
+    if (ts <= 0) return 'Never';
+    final d = DateTime.fromMillisecondsSinceEpoch(ts * 1000).toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)} '
+        '${two(d.hour)}:${two(d.minute)}';
+  }
+
+  static String _hostPort(String host, int port) {
+    if (host.isEmpty) return 'None';
+    if (port <= 0) return host;
+    return host.contains(':') ? '[$host]:$port' : '$host:$port';
+  }
+
+  static String _ago(int seconds) {
+    if (seconds < 60) return '$seconds s ago';
+    if (seconds < 3600) return '${seconds ~/ 60} min ago';
+    if (seconds < 86400) return '${seconds ~/ 3600} h ago';
+    return '${seconds ~/ 86400} d ago';
+  }
+
+  /// One entry of RsPeerDetails::ipAddressList reads
+  /// "ipv4://1.2.3.4:1234    123 sec loc" (or "ext"): the address, then how
+  /// long ago the node was seen there and whether it is a local or an
+  /// external address. Entries in another form are shown as they are.
+  static String _knownAddress(String entry) {
+    final m = RegExp(
+      r'^\s*(?:ipv4|ipv6)://(\[[^\]]+\]|[^:/\s]+):(\d+)'
+      r'(?:\s+(\d+)\s+sec\s+(loc|ext))?',
+      caseSensitive: false,
+    ).firstMatch(entry);
+    if (m == null) return entry.trim();
+    var host = m.group(1)!;
+    if (host.startsWith('[')) host = host.substring(1, host.length - 1);
+    final address =
+        _hostPort(host.replaceAll('%25', '%'), int.parse(m.group(2)!));
+    final where = m.group(4)?.toLowerCase() == 'loc'
+        ? 'local'
+        : m.group(4) != null
+            ? 'external'
+            : '';
+    final seen = m.group(3) != null ? _ago(int.parse(m.group(3)!)) : '';
+    final notes = [where, seen].where((v) => v.isNotEmpty).join(', ');
+    return notes.isEmpty ? address : '$address ($notes)';
   }
 
   static String _statusText(int status, bool isOnline) {
@@ -168,7 +456,9 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: SingleChildScrollView(
+      // SafeArea: the last buttons stay above Android's navigation bar.
+      body: SafeArea(
+        child: SingleChildScrollView(
         child: Column(
           children: [
             const SizedBox(height: 20),
@@ -260,23 +550,37 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                   ),
                 ),
               ),
+            if (!isValidationPending)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: SizedBox(
+                  width: double.infinity,
+                  // Filled, as Send message: an outlined button that is
+                  // active looked greyed, and whiter once disabled.
+                  child: FilledButton.icon(
+                    // Greyed once connected, and while an attempt runs.
+                    onPressed: _connecting || _connected
+                        ? null
+                        : _attemptToConnect,
+                    icon: const Icon(Icons.link),
+                    label: Text(
+                      _connecting ? 'Trying to connect...' : 'Attempt to connect',
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(height: 20),
 
-            // --- Detail tiles ---
+            // --- Node info, as the desktop's node details ---
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (widget.location.statusMessage.isNotEmpty)
-                    _infoTile(
-                      context,
-                      'Status Message',
-                      widget.location.statusMessage,
-                      Icons.chat,
-                    ),
+                  _sectionTitle(context, 'Node info'),
                   _infoTile(
                     context,
-                    'Account Name',
+                    'Name',
                     widget.location.accountName.isNotEmpty
                         ? widget.location.accountName
                         : '—',
@@ -284,41 +588,170 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                   ),
                   _infoTile(
                     context,
-                    'Location Name',
+                    'Node name',
                     widget.location.locationName.isNotEmpty
                         ? widget.location.locationName
                         : '—',
-                    Icons.location_on,
+                    Icons.devices,
                   ),
                   _infoTile(
                     context,
-                    'SSL Peer ID',
-                    widget.location.rsPeerId.isNotEmpty ? widget.location.rsPeerId : '—',
+                    'Status',
+                    _isLoading ? 'Loading...' : _connectionStatus(),
+                    widget.location.isOnline ? Icons.link : Icons.link_off,
+                    maxLines: 4,
+                  ),
+                  _infoTile(
+                    context,
+                    'Last contact',
+                    _isLoading ? 'Loading...' : _lastContact(),
+                    Icons.schedule,
+                  ),
+                  _infoTile(
+                    context,
+                    'RetroShare version',
+                    _isLoading
+                        ? 'Loading...'
+                        : (_version.isNotEmpty ? _version : 'Unknown'),
+                    Icons.info_outline,
+                  ),
+                  _infoTile(
+                    context,
+                    'Node ID',
+                    widget.location.rsPeerId.isNotEmpty
+                        ? widget.location.rsPeerId
+                        : '—',
                     Icons.vpn_key,
                   ),
                   _infoTile(
                     context,
                     'PGP ID',
-                    widget.location.rsGpgId.isNotEmpty ? widget.location.rsGpgId : '—',
+                    widget.location.rsGpgId.isNotEmpty
+                        ? widget.location.rsGpgId
+                        : '—',
                     Icons.security,
                   ),
-                  _infoTile(
-                    context,
-                    'Connection',
-                    widget.location.isOnline ? 'Connected' : 'Not connected',
-                    widget.location.isOnline ? Icons.link : Icons.link_off,
+                  if (widget.location.statusMessage.isNotEmpty &&
+                      !isValidationPending)
+                    _infoTile(
+                      context,
+                      'Status message',
+                      widget.location.statusMessage,
+                      Icons.chat,
+                      maxLines: 4,
+                    ),
+                  const SizedBox(height: 12),
+                  _sectionTitle(context, 'Connectivity'),
+                  if (_isLoading)
+                    _infoTile(
+                      context,
+                      'Addresses',
+                      'Loading...',
+                      Icons.settings_ethernet,
+                    )
+                  else if (_bool('isHiddenNode'))
+                    _infoTile(
+                      context,
+                      'Hidden address',
+                      _hostPort(
+                        _str('hiddenNodeAddress'),
+                        _int('hiddenNodePort'),
+                      ),
+                      Icons.vpn_lock,
+                    )
+                  else ...[
+                    _infoTile(
+                      context,
+                      'Local address',
+                      _hostPort(_str('localAddr'), _int('localPort')),
+                      Icons.settings_ethernet,
+                    ),
+                    _infoTile(
+                      context,
+                      'External address',
+                      _hostPort(_str('extAddr'), _int('extPort')),
+                      Icons.language,
+                    ),
+                    if (_str('dyndns').isNotEmpty)
+                      _infoTile(
+                        context,
+                        'Dynamic DNS',
+                        _str('dyndns'),
+                        Icons.dns,
+                      ),
+                  ],
+                  if (!_isLoading) _knownAddressesTile(context),
+                  if (_retroshareId.isNotEmpty || _longFormat) ...[
+                    const SizedBox(height: 12),
+                    _sectionTitle(context, 'RetroShare ID'),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Short')),
+                        ButtonSegment(value: true, label: Text('Long')),
+                      ],
+                      selected: {_longFormat},
+                      onSelectionChanged: (s) => _setFormat(s.first),
+                    ),
+                    const SizedBox(height: 10),
+                    _infoTile(
+                      context,
+                      'Give it to another node to add this one as a friend',
+                      _retroshareId.isEmpty ? 'Not available' : _retroshareId,
+                      Icons.badge_outlined,
+                      maxLines: 6,
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => SharePlus.instance
+                                .share(ShareParams(text: _retroshareId)),
+                            icon: const Icon(Icons.share),
+                            label: const Text('Share'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _showRetroshareIdQr,
+                            icon: const Icon(Icons.qr_code),
+                            label: const Text('QR code'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: widget.location.rsPeerId.isEmpty
+                          ? null
+                          : () => _remove(wholeFriend: false),
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Remove node'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                      ),
+                    ),
                   ),
-                  _infoTile(
-                    context,
-                    'Local IP & Port',
-                    _isLoading ? 'Loading...' : '$_localIP:$_localPort',
-                    Icons.settings_ethernet,
-                  ),
-                  _infoTile(
-                    context,
-                    'External IP & Port',
-                    _isLoading ? 'Loading...' : '$_externalIP:$_externalPort',
-                    Icons.language,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: widget.location.rsGpgId.isEmpty
+                          ? null
+                          : () => _remove(wholeFriend: true),
+                      icon: const Icon(Icons.person_remove_outlined),
+                      label: const Text('Remove friend'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -326,7 +759,37 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
             const SizedBox(height: 30),
           ],
         ),
+        ),
       ),
+    );
+  }
+
+  Widget _sectionTitle(BuildContext context, String title) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title,
+        style: theme.textTheme.titleSmall?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _knownAddressesTile(BuildContext context) {
+    final entries = (_det['ipAddressList'] as List?)
+            ?.map((e) => _knownAddress(e.toString()))
+            .where((e) => e.isNotEmpty)
+            .toList() ??
+        const <String>[];
+    return _infoTile(
+      context,
+      'Known addresses (${entries.length})',
+      entries.isEmpty ? 'No address history' : entries.join('\n'),
+      Icons.history,
+      maxLines: 30,
     );
   }
 
@@ -336,6 +799,7 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
     String value,
     IconData icon, {
     Color? valueColor,
+    int maxLines = 2,
   }) {
     final theme = Theme.of(context);
     return Container(
@@ -367,7 +831,7 @@ class _FriendLocationDetailScreenState extends State<FriendLocationDetailScreen>
                 Text(
                   value,
                   overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
+                  maxLines: maxLines,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontFamily: 'Oxygen',
                     fontWeight: FontWeight.w600,
