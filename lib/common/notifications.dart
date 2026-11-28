@@ -11,8 +11,25 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 final BehaviorSubject<String?> selectNotificationSubject =
     BehaviorSubject<String?>();
 
+/// Android notification channels: chat messages alert the user, plain
+/// information does not.
+const chatNotificationChannel = 'retroshare_chat';
+const infoNotificationChannel = 'retroshare_info';
+
 Future<void> initializeNotifications() async {
   if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
+
+  // Chat messages and plain information shared one channel, and Android
+  // keeps a channel as its first notification made it: where "Invite
+  // copied!" came first, chat messages stayed silent for good. Each has its
+  // own channel now, and the shared one goes.
+  if (!kIsWeb && Platform.isAndroid) {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.deleteNotificationChannel(channelId: 'RetroshareFlutter');
+  }
 
   notificationAppLaunchDetails =
       await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
@@ -62,9 +79,9 @@ Future<void> showChatNotification(
   //      'http://via.placeholder.com/128x128/00FF00/000000', 'largeIcon');
 
   const androidPlatformChannelSpecifics = AndroidNotificationDetails(
-    'RetroshareFlutter',
-    'RetroshareFlutter',
-    channelDescription: 'RetroShare flutter app',
+    chatNotificationChannel,
+    'Chat messages',
+    channelDescription: 'Messages of chats and chat rooms',
     importance: Importance.max,
     priority: Priority.high,
     ticker: 'ticker',
@@ -116,9 +133,9 @@ Future<void> showInviteCopyNotification() async {
   if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
 
   const androidPlatformChannelSpecifics = AndroidNotificationDetails(
-    'RetroshareFlutter',
-    'RetroshareFlutter',
-    channelDescription: 'RetroShare flutter app',
+    infoNotificationChannel,
+    'Information',
+    channelDescription: 'What the application just did',
     ticker: 'ticker',
   );
   const platformChannelSpecifics =
