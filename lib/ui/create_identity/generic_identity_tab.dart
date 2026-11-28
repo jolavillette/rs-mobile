@@ -10,6 +10,7 @@ import 'package:retroshare/common/image_picker_dialog.dart';
 import 'package:retroshare/common/styles.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:retroshare/common/rs_tokens.dart';
 
 class GenericIdentityTab extends StatefulWidget {
   const GenericIdentityTab({
@@ -244,15 +245,8 @@ class GenericIdentityTabState extends State<GenericIdentityTab> {
                         },
                         child: Ink(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(15),
-                            gradient: const LinearGradient(
-                              colors: <Color>[
-                                Color(0xFF00FFFF),
-                                Color(0xFF29ABE2),
-                              ],
-                              begin: Alignment(-1, -4),
-                              end: Alignment(1, 4),
-                            ),
+                            borderRadius: BorderRadius.circular(RsScale.rSm),
+                            gradient: context.rs.actionGradient,
                           ),
                           child: Container(
                             alignment: Alignment.center,

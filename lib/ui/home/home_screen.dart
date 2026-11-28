@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/eventsource.dart';
 import 'package:retroshare/common/badge_helper.dart';
 import 'package:retroshare/common/drawer.dart';
-import 'package:retroshare/common/styles.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
 import 'package:retroshare/provider/room.dart';
@@ -12,7 +11,11 @@ import 'package:retroshare/provider/subscribed.dart';
 import 'package:retroshare/routes.dart';
 import 'package:retroshare/ui/home/chats_tab.dart';
 import 'package:retroshare/ui/home/friends_tab.dart';
+import 'package:retroshare/ui/home/home_tab.dart';
+import 'package:retroshare/ui/home/more_tab.dart';
+import 'package:retroshare/ui/home/people_tab.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Chat, Location;
+import 'package:retroshare/common/rs_tokens.dart';
 
 const double _desktopBreakpoint = 840;
 const double _desktopSidebarWidth = 380;
@@ -24,13 +27,15 @@ class HomeScreen extends StatefulWidget {
   HomeScreenState createState() => HomeScreenState();
 }
 
-class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  late final TabController _tabController;
+class HomeScreenState extends State<HomeScreen> {
+  // The bottom navigation of the web UI: Home, Network, People, Chat, More.
+  static const _networkTab = 1, _peopleTab = 2, _chatTab = 3;
+  int _tab = _chatTab;
+  bool _desktop = false;
   bool _isInit = true;
   bool _isLoading = false;
   bool _isEventRegistered = false;
   Timer? _inviteCheckTimer;
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<NavigatorState> _desktopNavigatorKey =
       GlobalKey<NavigatorState>();
 
@@ -49,7 +54,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _showDesktopRoute(String routeName, {Object? arguments}) {
-    _scaffoldKey.currentState?.closeDrawer();
     final navigator = _desktopNavigatorKey.currentState;
     if (navigator == null) return;
     navigator.popUntil((route) => route.isFirst);
@@ -60,12 +64,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _isInit = true;
-    _tabController = TabController(vsync: this, length: 2);
-    _tabController.addListener(() {
-      if (mounted) {
-        setState(() {});
-      }
-    });
 
     // Start periodic invite check
     _inviteCheckTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
@@ -186,153 +184,134 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     } catch (_) {
       // Providers might be already disposed during logout/shutdown
     }
-    _tabController.dispose();
     super.dispose();
   }
 
-  PreferredSizeWidget _appBar({required bool desktop}) {
-    final statusBarHeight = MediaQuery.of(context).padding.top;
-    const appBarHeight = 56;
-    const verticalPadding = 8;
-    final totalHeight = statusBarHeight + appBarHeight + verticalPadding * 2;
-    final activeBlue = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF29ABE2),
-      brightness: Brightness.dark,
-    ).primary;
-    final isLight = Theme.of(context).brightness == Brightness.light;
-    final appBarIconColor = isLight ? const Color(0xFF29ABE2) : activeBlue;
-    final appBarTextColor = isLight
-        ? const Color(0xFF29ABE2)
-        : Theme.of(context).colorScheme.onSurface;
+  /// Opens [route] in the detail pane on a desktop layout, as a page on a
+  /// phone, and refreshes the lists when the page is closed.
+  void _open(String route, {Object? arguments}) {
+    if (_desktop) {
+      _showDesktopRoute(route, arguments: arguments);
+      return;
+    }
+    Navigator.pushNamed(context, route, arguments: arguments)
+        .then((_) => fetchdata(context));
+  }
 
-    return PreferredSize(
-      preferredSize: Size.fromHeight(totalHeight),
-      child: Stack(
-        children: <Widget>[
-          Container(
-            height: totalHeight,
-            width: MediaQuery.of(context).size.width,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: <Color>[
-                  Color(0xFF00FFFF),
-                  Color(0xFF29ABE2),
-                ],
-                begin: Alignment(-1, -4),
-                end: Alignment(1, 4),
-              ),
-            ),
+  static const _titles = ['Home', 'Network', 'People', 'Chat', 'More'];
+
+  List<Widget> _actions() {
+    switch (_tab) {
+      case _networkTab:
+        return [
+          IconButton(
+            tooltip: 'Search',
+            icon: const Icon(Icons.search),
+            onPressed: () => _open('/search', arguments: 1),
           ),
-          Positioned(
-            top: statusBarHeight + verticalPadding,
-            left: 12,
-            right: 12,
-            height: appBarHeight.toDouble(),
-            child: AppBar(
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              titleSpacing: 0,
-              leading: IconButton(
-                icon: Icon(
-                  Icons.menu,
-                  color: appBarIconColor,
-                ),
-                onPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
-                },
-              ),
-              primary: false,
-              title: Text(
-                'RetroShare',
-                style: TextStyle(
-                  color: appBarTextColor,
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.start,
-              ),
-              actions: <Widget>[
-                IconButton(
-                  icon: Icon(
-                    Icons.search,
-                    color: appBarIconColor,
-                  ),
-                  onPressed: () {
-                    if (desktop) {
-                      _showDesktopRoute(
-                        '/search',
-                        arguments: _tabController.index,
-                      );
-                      return;
-                    }
-                    Navigator.pushNamed(
-                      context,
-                      '/search',
-                      arguments: _tabController.index,
-                    ).then((value) async {
-                      await fetchdata(context);
-                    });
-                  },
-                ),
-                IconButton(
-                  icon: const NotificationIcon(),
-                  onPressed: () {
-                    if (desktop) {
-                      _showDesktopRoute('/notification');
-                      return;
-                    }
-                    Navigator.of(context)
-                        .pushNamed('/notification')
-                        .then((value) {
-                      fetchdata(context);
-                    });
-                  },
-                ),
-              ],
-            ),
+          IconButton(
+            tooltip: "Friends' devices",
+            icon: const Icon(Icons.devices_outlined),
+            onPressed: () => _open('/friends_locations'),
           ),
-        ],
-      ),
+        ];
+      case _peopleTab:
+        return [
+          IconButton(
+            tooltip: 'Change the active identity',
+            icon: const Icon(Icons.swap_horiz),
+            onPressed: () => _open('/change_identity'),
+          ),
+        ];
+      case _chatTab:
+        return [
+          IconButton(
+            tooltip: 'Search',
+            icon: const Icon(Icons.search),
+            onPressed: () => _open('/search', arguments: 0),
+          ),
+          IconButton(
+            tooltip: 'Public chat rooms',
+            icon: const Icon(Icons.public),
+            onPressed: () => _open('/discover_chats'),
+          ),
+          IconButton(
+            tooltip: 'Invitations',
+            icon: const NotificationIcon(),
+            onPressed: () => _open('/notification'),
+          ),
+        ];
+      default:
+        return const [];
+    }
+  }
+
+  Widget? _fab() {
+    switch (_tab) {
+      case _networkTab:
+        return FloatingActionButton(
+          tooltip: 'Add a friend',
+          onPressed: () => _open('/add_friend'),
+          child: const Icon(Icons.person_add_alt),
+        );
+      case _peopleTab:
+        return FloatingActionButton(
+          tooltip: 'New identity',
+          onPressed: () => _open('/create_identity'),
+          child: const Icon(Icons.add),
+        );
+      case _chatTab:
+        return FloatingActionButton(
+          tooltip: 'New chat room',
+          onPressed: () => _open('/create_room'),
+          child: const Icon(Icons.add_comment_outlined),
+        );
+      default:
+        return null;
+    }
+  }
+
+  Widget _chatIcon(bool selected) {
+    return Consumer2<ChatLobby, RoomChatLobby>(
+      builder: (context, chatLobby, roomChatLobby, _) {
+        final unread = chatLobby.subscribedlist
+                .fold(0, (sum, chat) => sum + chat.unreadCount) +
+            roomChatLobby.distantUnreadCount +
+            roomChatLobby.peerUnreadCount +
+            chatLobby.pendingInviteCount;
+        final icon = Icon(selected ? Icons.forum : Icons.forum_outlined);
+        if (unread == 0) return icon;
+        return Badge(
+          label: Text(unread > 99 ? '99+' : '$unread'),
+          child: icon,
+        );
+      },
     );
   }
 
   Widget _buildHomeScaffold({required bool desktop}) {
-    final activeBlue = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF29ABE2),
-      brightness: Brightness.dark,
-    ).primary;
-
+    _desktop = desktop;
     return Scaffold(
-      onDrawerChanged: (val) async {
-        if (!val) {
-          await fetchdata(context);
-        }
-      },
-      key: _scaffoldKey,
       resizeToAvoidBottomInset: false,
-      drawer: drawerWidget(
-        context,
-        onNavigate: desktop
-            ? (routeName, arguments) => _showDesktopRoute(
-                  routeName,
-                  arguments: arguments,
-                )
-            : null,
+      appBar: AppBar(
+        // The root of the app: nothing to go back to.
+        automaticallyImplyLeading: false,
+        title: Text(_titles[_tab]),
+        actions: _actions(),
       ),
-      appBar: _appBar(desktop: desktop),
       body: Stack(
         children: [
-          TabBarView(
-            controller: _tabController,
+          IndexedStack(
+            index: _tab,
             children: [
+              HomeTab(open: _open),
+              FriendsTab(onOpenRoom: desktop ? _openRoom : null),
+              PeopleTab(open: _open),
               ChatsTab(
                 onOpenRoom: desktop ? _openRoom : null,
                 onOpenPeerChat: desktop ? _openPeerChat : null,
               ),
-              FriendsTab(onOpenRoom: desktop ? _openRoom : null),
+              MoreTab(open: _open),
             ],
           ),
           if (_isLoading)
@@ -346,158 +325,37 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
         ],
       ),
-      bottomNavigationBar: BottomAppBar(
-        height: appBarHeight,
-        padding: EdgeInsets.zero,
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 7,
-        child: SizedBox(
-          height: appBarHeight,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: <Widget>[
-              Expanded(
-                child: InkWell(
-                  onTap: () => _tabController.animateTo(0),
-                  child: Consumer2<ChatLobby, RoomChatLobby>(
-                    builder: (context, chatLobby, roomChatLobby, _) {
-                      // Aggregate room unreads
-                      final roomUnread = chatLobby.subscribedlist
-                          .fold(0, (sum, chat) => sum + chat.unreadCount);
-
-                      final totalUnread = roomUnread +
-                          roomChatLobby.distantUnreadCount +
-                          roomChatLobby.peerUnreadCount;
-
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Icon(
-                                Icons.chat_bubble_outline,
-                                size: 26,
-                                color: _tabController.index == 0
-                                    ? activeBlue
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withAlpha(128),
-                              ),
-                              if (totalUnread > 0)
-                                Positioned(
-                                  right: -8,
-                                  top: -8,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 16,
-                                      minHeight: 16,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        totalUnread > 99
-                                            ? '99+'
-                                            : totalUnread.toString(),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Chats',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: _tabController.index == 0
-                                  ? activeBlue
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withAlpha(128),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 74),
-              Expanded(
-                child: InkWell(
-                  onTap: () => _tabController.animateTo(1),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.people_outline,
-                        size: 26,
-                        color: _tabController.index == 1
-                            ? activeBlue
-                            : Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withAlpha(128),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Contacts',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _tabController.index == 1
-                              ? activeBlue
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withAlpha(128),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+      floatingActionButton: _fab(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
           ),
-        ),
-      ),
-      floatingActionButton: SizedBox(
-        height: 54,
-        width: 54,
-        child: FittedBox(
-          child: FloatingActionButton(
-              backgroundColor: Colors.lightBlueAccent,
-              onPressed: () async {
-                if (desktop) {
-                  _showDesktopRoute('/create_room');
-                  return;
-                }
-                await Navigator.pushNamed(context, '/create_room');
-            },
-            child: const Icon(
-              Icons.add,
-              size: 35,
-              color: Colors.white,
-            ),
+          const NavigationDestination(
+            icon: Icon(Icons.share_outlined),
+            selectedIcon: Icon(Icons.share),
+            label: 'Network',
           ),
-        ),
+          const NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
+            label: 'People',
+          ),
+          NavigationDestination(
+            icon: _chatIcon(false),
+            selectedIcon: _chatIcon(true),
+            label: 'Chat',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.menu),
+            label: 'More',
+          ),
+        ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -514,7 +372,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Icon(
                 Icons.forum_outlined,
                 size: 72,
-                color: const Color(0xFF29ABE2),
+                color: context.rs.brand,
               ),
               const SizedBox(height: 20),
               Text(

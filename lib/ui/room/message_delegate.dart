@@ -15,6 +15,7 @@ import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/ui/room/voice_message_widget.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:video_player/video_player.dart';
+import 'package:retroshare/common/rs_tokens.dart';
 
 enum BubbleStyle { bubble, compact }
 
@@ -123,8 +124,8 @@ class MessageDelegate extends StatelessWidget {
       bubbleColor = const Color(0xFFFFD43D);
       borderColor = const Color(0xFFC9A200);
     } else if (isIncoming) {
-      bubbleColor = const Color(0xFF8EDFFF);
-      borderColor = const Color(0xFF29ABE2);
+      bubbleColor = context.rs.selectSoft;
+      borderColor = context.rs.brand;
     } else if (isOffline) {
       bubbleColor = const Color(0xFFFF8E8E);
       borderColor = const Color(0xFFD43D3D);

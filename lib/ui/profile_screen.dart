@@ -6,6 +6,7 @@ import 'package:retroshare/common/identicon.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/room.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:retroshare/common/rs_tokens.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.curr});
@@ -182,13 +183,11 @@ class ProfileScreenState extends State<ProfileScreen> {
         height: 45,
         width: double.infinity,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF00FFFF), Color(0xFF29ABE2)],
-          ),
+          borderRadius: BorderRadius.circular(RsScale.rSm),
+          gradient: context.rs.actionGradient,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF29ABE2).withOpacity(0.3),
+              color: context.rs.brand.withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),

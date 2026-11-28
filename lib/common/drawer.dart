@@ -13,6 +13,7 @@ import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/subscribed.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:retroshare/common/rs_tokens.dart';
 
 typedef DrawerNavigationCallback = void Function(
   String routeName,
@@ -309,12 +310,8 @@ class NotificationIconState extends State<NotificationIcon> {
     final inviteCount = context.select<ChatLobby, int>(
       (chatLobby) => chatLobby.pendingInviteCount,
     );
-    final isLight = Theme.of(context).brightness == Brightness.light;
-    final activeBlue = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF29ABE2),
-      brightness: Brightness.dark,
-    ).primary;
-    final appBarIconColor = isLight ? const Color(0xFF29ABE2) : activeBlue;
+    final activeBlue = context.rs.brand;
+    final appBarIconColor = activeBlue;
 
     return Stack(
       children: [

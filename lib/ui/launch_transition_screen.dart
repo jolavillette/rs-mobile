@@ -1,5 +1,6 @@
 import 'package:retroshare/common/rs_logo.dart';
 import 'package:flutter/material.dart';
+import 'package:retroshare/common/rs_tokens.dart';
 
 class LaunchTransitionScreen extends StatefulWidget {
   const LaunchTransitionScreen({super.key});
@@ -79,15 +80,8 @@ class GradientButton extends StatelessWidget {
       width: double.infinity,
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          gradient: const LinearGradient(
-            colors: <Color>[
-              Color(0xFF00FFFF),
-              Color(0xFF29ABE2),
-            ],
-            begin: Alignment(-1, -4),
-            end: Alignment(1, 4),
-          ),
+          borderRadius: BorderRadius.circular(RsScale.rSm),
+          gradient: context.rs.actionGradient,
         ),
         padding: const EdgeInsets.all(10),
         child: Text(

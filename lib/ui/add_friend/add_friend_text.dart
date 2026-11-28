@@ -7,6 +7,7 @@ import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare/provider/friend_location.dart';
 
 import 'package:retroshare/ui/qr_scanner_screen.dart';
+import 'package:retroshare/common/rs_tokens.dart';
 
 class GetAddfriend extends StatefulWidget {
   const GetAddfriend({super.key});
@@ -89,15 +90,8 @@ class GetAddfriendState extends State<GetAddfriend> {
                 width: double.infinity,
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    gradient: const LinearGradient(
-                      colors: <Color>[
-                        Color(0xFF00FFFF),
-                        Color(0xFF29ABE2),
-                      ],
-                      begin: Alignment(-1, -4),
-                      end: Alignment(1, 4),
-                    ),
+                    borderRadius: BorderRadius.circular(RsScale.rSm),
+                    gradient: context.rs.actionGradient,
                   ),
                   padding: const EdgeInsets.all(10),
                   child: const Text(
@@ -123,7 +117,7 @@ class GetAddfriendState extends State<GetAddfriend> {
                 width: double.infinity,
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(RsScale.rSm),
                     gradient: const LinearGradient(
                       colors: <Color>[Colors.purple, Colors.purpleAccent],
                       begin: Alignment(-1, -4),

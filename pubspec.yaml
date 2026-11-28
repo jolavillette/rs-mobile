@@ -128,6 +128,22 @@ flutter:
   # list giving the asset and other descriptors for the font. For
   # example:
   fonts:
+    # The web UI's fonts (RSNewWebUI assets/webfonts), converted to TTF:
+    # Archivo instanced at four weights from its variable font. OFL.txt next to them.
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo/Archivo-Regular.ttf
+        - asset: assets/fonts/Archivo/Archivo-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Archivo/Archivo-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Archivo/Archivo-Bold.ttf
+          weight: 700
+    - family: DM Mono
+      fonts:
+        - asset: assets/fonts/DMMono/DMMono-Regular.ttf
+        - asset: assets/fonts/DMMono/DMMono-Medium.ttf
+          weight: 500
     - family: Oxygen
       fonts:
         - asset: assets/fonts/Oxygen-Regular.ttf
