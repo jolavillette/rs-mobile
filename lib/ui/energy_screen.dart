@@ -11,11 +11,10 @@ class _Sample {
         uptimeMs = int.parse(f[2]),
         pid = int.parse(f[3]),
         cpuMs = int.parse(f[4]),
-        rxBytes = int.parse(f[5]),
-        txBytes = int.parse(f[6]),
-        rxPackets = int.parse(f[7]),
-        txPackets = int.parse(f[8]),
-        mobile = f[9] == 'm',
+        // f[5] to f[9], not shown: the traffic on every interface, the
+        // loopback between the screens and the core included, and the
+        // network in use; the counters at the end of the line are what went
+        // over the air.
         level = int.parse(f[10]),
         chargeUah = int.parse(f[11]),
         plugged = f[12] == '1',
@@ -23,18 +22,20 @@ class _Sample {
         heldAwakeMs = int.parse(f[14]),
         keepAlives = int.parse(f[15]),
         incomingWakes = int.parse(f[16]),
-        appMah = double.parse(f[17]);
+        appMah = double.parse(f[17]),
+        wifiBytes = _optional(f, 18),
+        wifiPackets = _optional(f, 19),
+        mobileBytes = _optional(f, 20),
+        mobilePackets = _optional(f, 21);
+
+  static int _optional(List<String> f, int i) =>
+      f.length > i ? int.parse(f[i]) : -1;
 
   final int wallMs;
   final int elapsedMs;
   final int uptimeMs;
   final int pid;
   final int cpuMs;
-  final int rxBytes;
-  final int txBytes;
-  final int rxPackets;
-  final int txPackets;
-  final bool mobile;
   final int level;
   final int chargeUah;
   final bool plugged;
@@ -48,6 +49,14 @@ class _Sample {
   /// What Android charges to the application since its statistics were
   /// reset, or negative when this line does not carry it.
   final double appMah;
+
+  /// Over Wi-Fi and over the mobile network, both ways, since the phone
+  /// started, as Android's network statistics count them; negative when the
+  /// line does not carry them (older lines, or Android could not tell).
+  final int wifiBytes;
+  final int wifiPackets;
+  final int mobileBytes;
+  final int mobilePackets;
 
   static List<_Sample> parse(String log) {
     final samples = <_Sample>[];
@@ -98,17 +107,20 @@ class _Period {
         keepAlives += b.keepAlives - a.keepAlives;
         incomingWakes += b.incomingWakes - a.incomingWakes;
       }
-      final packets =
-          b.rxPackets - a.rxPackets + b.txPackets - a.txPackets;
-      final bytes = b.rxBytes - a.rxBytes + b.txBytes - a.txBytes;
-      if (packets >= 0 && bytes >= 0) {
-        if (b.mobile) {
-          mobilePackets += packets;
-          mobileBytes += bytes;
-        } else {
-          wifiPackets += packets;
-          wifiBytes += bytes;
-        }
+      // The network counters restart with the phone, like the clocks.
+      if (a.wifiBytes >= 0 &&
+          b.wifiBytes >= a.wifiBytes &&
+          b.wifiPackets >= a.wifiPackets) {
+        wifiMs += ms;
+        wifiBytes += b.wifiBytes - a.wifiBytes;
+        wifiPackets += b.wifiPackets - a.wifiPackets;
+      }
+      if (a.mobileBytes >= 0 &&
+          b.mobileBytes >= a.mobileBytes &&
+          b.mobilePackets >= a.mobilePackets) {
+        mobileMs += ms;
+        mobileBytes += b.mobileBytes - a.mobileBytes;
+        mobilePackets += b.mobilePackets - a.mobilePackets;
       }
       if (!a.plugged && !b.plugged && a.chargeUah > 0 && b.chargeUah > 0) {
         batteryMs += ms;
@@ -129,8 +141,10 @@ class _Period {
   int heldAwakeMs = 0;
   int keepAlives = 0;
   int incomingWakes = 0;
+  int wifiMs = 0;
   int wifiPackets = 0;
   int wifiBytes = 0;
+  int mobileMs = 0;
   int mobilePackets = 0;
   int mobileBytes = 0;
   int batteryMs = 0;
@@ -143,6 +157,8 @@ class _Period {
   double get processHours => processMs / 3600000;
   double get batteryHours => batteryMs / 3600000;
   double get powerHours => powerMs / 3600000;
+  double get wifiHours => wifiMs / 3600000;
+  double get mobileHours => mobileMs / 3600000;
 }
 
 /// The Battery tab of Statistics. What RetroShare does to the battery: its
@@ -304,15 +320,10 @@ class _EnergyViewState extends State<EnergyView> {
           '${_decimal(p.incomingWakes / p.processHours)} /h',
         );
       }
-      row(
-        'Wi-Fi',
-        '${_decimal(p.wifiPackets / p.hours)} packets/h, '
-            '${_decimal(p.wifiBytes / 1000 / p.hours)} kB/h',
-      );
+      row('Wi-Fi', _traffic(p.wifiPackets, p.wifiBytes, p.wifiHours));
       row(
         'Mobile network',
-        '${_decimal(p.mobilePackets / p.hours)} packets/h, '
-            '${_decimal(p.mobileBytes / 1000 / p.hours)} kB/h',
+        _traffic(p.mobilePackets, p.mobileBytes, p.mobileHours),
       );
 
       header('Battery of the phone, every application');
@@ -366,6 +377,13 @@ class _EnergyViewState extends State<EnergyView> {
       ),
     );
   }
+
+  /// Per hour of the time the counters cover, which is the whole period
+  /// once the lines carry them.
+  static String _traffic(int packets, int bytes, double hours) => hours > 0
+      ? '${_decimal(packets / hours)} packets/h, '
+          '${_decimal(bytes / 1000 / hours)} kB/h'
+      : '-';
 
   static String _decimal(double value) =>
       value.isFinite ? value.toStringAsFixed(2) : '-';

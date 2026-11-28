@@ -1,6 +1,8 @@
 package cc.retroshare.retroshare
 
 import android.Manifest
+import android.app.usage.NetworkStats
+import android.app.usage.NetworkStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -9,6 +11,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.TrafficStats
 import android.os.BatteryManager
+import android.os.Build
 import android.os.Process
 import android.os.SystemClock
 import io.flutter.embedding.engine.FlutterEngine
@@ -105,6 +108,8 @@ object EnergyLog {
                 incoming = incomingWakes
             }
             val uid = Process.myUid()
+            val wifi = ownTraffic(context, ConnectivityManager.TYPE_WIFI)
+            val mobile = ownTraffic(context, ConnectivityManager.TYPE_MOBILE)
             val battery = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val status = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val plugged = (status?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
@@ -114,6 +119,8 @@ object EnergyLog {
                 SystemClock.uptimeMillis(),
                 Process.myPid(),
                 Process.getElapsedCpuTime(),
+                // Every interface, the loopback included: the screens and the
+                // core talk over it. Not shown; the columns keep their place.
                 TrafficStats.getUidRxBytes(uid),
                 TrafficStats.getUidTxBytes(uid),
                 TrafficStats.getUidRxPackets(uid),
@@ -127,6 +134,10 @@ object EnergyLog {
                 alarms,
                 incoming,
                 if (withAppPower) appPowerMah(context) else -1.0,
+                wifi[0],
+                wifi[1],
+                mobile[0],
+                mobile[1],
             ).joinToString(";")
             logFile(context).appendText(line + "\n")
         } catch (_: Exception) {
@@ -139,6 +150,38 @@ object EnergyLog {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return "n"
         return if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) "m" else "w"
+    }
+
+    // Bytes and packets, both ways, this application sent and received over
+    // Wi-Fi or over the mobile network since the phone started, as Android's
+    // network statistics count them: what went over the air, without the
+    // loopback traffic. -1 when they cannot be read; Android before 10 asks
+    // for the subscriber of a mobile network, which needs a permission.
+    private fun ownTraffic(context: Context, type: Int): LongArray {
+        val none = longArrayOf(-1, -1)
+        if (type == ConnectivityManager.TYPE_MOBILE && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return none
+        val manager = context.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
+        val now = System.currentTimeMillis()
+        // From the start of the phone, so that the start of the range stays the
+        // same from one line to the next.
+        val boot = now - SystemClock.elapsedRealtime()
+        var stats: NetworkStats? = null
+        return try {
+            stats = manager.queryDetailsForUid(type, null, boot, now, Process.myUid())
+            val bucket = NetworkStats.Bucket()
+            var bytes = 0L
+            var packets = 0L
+            while (stats.hasNextBucket()) {
+                stats.getNextBucket(bucket)
+                bytes += bucket.rxBytes + bucket.txBytes
+                packets += bucket.rxPackets + bucket.txPackets
+            }
+            longArrayOf(bytes, packets)
+        } catch (_: Exception) {
+            none
+        } finally {
+            stats?.close()
+        }
     }
 
     // Both permissions are of the kind only adb can grant.
