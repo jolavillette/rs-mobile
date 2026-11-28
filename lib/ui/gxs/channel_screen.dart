@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/apiUtils/gxs_changes.dart';
 import 'package:retroshare/apiUtils/gxs_content.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
@@ -24,6 +25,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
   static const _batch = 12;
 
   GxsContent? _content;
+  GxsChangeWatch? _watch;
   bool _loading = true;
   bool _loadingMore = false;
   bool _busy = false;
@@ -35,6 +37,10 @@ class _ChannelScreenState extends State<ChannelScreen> {
   final List<GxsPost> _posts = [];
   int _asked = 0;
 
+  /// The reads of the page, one after the other: each starts from what the
+  /// one before left.
+  Future<void> _reads = Future<void>.value();
+
   @override
   void initState() {
     super.initState();
@@ -42,30 +48,88 @@ class _ChannelScreenState extends State<ChannelScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _watch?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _serial(Future<void> Function() read) {
+    final done = _reads.then<void>((_) => mounted ? read() : null);
+    _reads = done.catchError((Object _) {});
+    return done;
+  }
+
+  /// Reads the channel from its start.
+  Future<void> _load() => _serial(() async {
+        await _readGroup(keep: false);
+        await _readMore();
+      });
+
+  /// Reads the channel again, when the page is pulled or the core reports
+  /// news: the posts already read stay, the new ones are added, and the
+  /// page keeps its place.
+  Future<void> _refresh() => _serial(() => _readGroup(keep: true));
+
+  /// Reads the next posts.
+  Future<void> _loadMore() {
+    if (_loadingMore || _asked >= _metas.length) return Future<void>.value();
+    _loadingMore = true;
+    return _serial(_readMore);
+  }
+
+  Future<void> _readGroup({required bool keep}) async {
     final token =
         Provider.of<AccountCredentials>(context, listen: false).authtoken;
     if (token == null) return;
     final content = _content ??= GxsContent(GxsContentKind.channels, token);
+    _watch ??= GxsChangeWatch(
+      token,
+      GxsContentKind.channels,
+      _refresh,
+      groupId: widget.group.id,
+    );
     try {
       final info = await content.groupInfo(widget.group.id);
       final metas = await content.postMetas(widget.group.id)
         ..sort((a, b) => b.published.compareTo(a.published));
+      // The posts to show now: none from the start; when kept, those shown
+      // and the new ones, a batch of them at most.
+      final known = {for (final meta in _metas) meta.id};
+      final added = metas.where((meta) => !known.contains(meta.id)).length;
+      final count = keep
+          ? (_asked + added.clamp(0, _batch)).clamp(0, metas.length)
+          : 0;
+      final wanted = metas.take(count).toList();
+      final shown = {for (final post in _posts) post.meta.id: post};
+      final missing = [
+        for (final meta in wanted)
+          if (!shown.containsKey(meta.id)) meta.id,
+      ];
+      if (missing.isNotEmpty) {
+        for (final post in await content.posts(widget.group.id, missing)) {
+          shown[post.meta.id] = post;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _subscribed = info?.group.subscribed ?? _subscribed;
         _description = info?.description ?? '';
         _info = info;
         _metas = metas;
-        _posts.clear();
-        _asked = 0;
+        _posts
+          ..clear()
+          ..addAll([
+            for (final meta in wanted)
+              if (shown[meta.id] case final post?) post,
+          ]);
+        _asked = count;
         _error = null;
         _loading = false;
       });
-      await _loadMore();
     } catch (error) {
       debugPrint('Channel ${widget.group.id}: $error');
-      if (!mounted) return;
+      if (!mounted || (keep && _posts.isNotEmpty)) return;
       setState(() {
         _error = 'Could not read this channel.';
         _loading = false;
@@ -73,9 +137,12 @@ class _ChannelScreenState extends State<ChannelScreen> {
     }
   }
 
-  Future<void> _loadMore() async {
+  Future<void> _readMore() async {
     final content = _content;
-    if (content == null || _loadingMore || _asked >= _metas.length) return;
+    if (content == null || _asked >= _metas.length) {
+      _loadingMore = false;
+      return;
+    }
     final slice = _metas.sublist(
       _asked,
       (_asked + _batch).clamp(0, _metas.length),
@@ -171,7 +238,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
 
   /// Loads older posts as a list nears its end.
   Widget _scrolling(Widget child) => RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: _refresh,
         child: NotificationListener<ScrollNotification>(
           onNotification: (scroll) {
             if (scroll.metrics.extentAfter < 600) _loadMore();
@@ -196,7 +263,7 @@ class _ChannelScreenState extends State<ChannelScreen> {
             : '${group.popularity} friends subscribed',
     ];
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: _refresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [

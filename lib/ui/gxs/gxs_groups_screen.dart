@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/apiUtils/gxs_changes.dart';
 import 'package:retroshare/apiUtils/gxs_content.dart';
 import 'package:retroshare/apiUtils/mobile_services.dart';
 import 'package:retroshare/common/rs_tokens.dart';
@@ -23,6 +24,7 @@ class GxsGroupsScreen extends StatefulWidget {
 
 class _GxsGroupsScreenState extends State<GxsGroupsScreen> {
   GxsContent? _content;
+  GxsChangeWatch? _watch;
   bool _loading = true;
   bool _serviceOn = false;
   String? _error;
@@ -34,11 +36,19 @@ class _GxsGroupsScreenState extends State<GxsGroupsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
+  @override
+  void dispose() {
+    _watch?.cancel();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final token =
         Provider.of<AccountCredentials>(context, listen: false).authtoken;
     if (token == null) return;
     final content = _content ??= GxsContent(widget.kind, token);
+    // The list follows the groups and posts that arrive.
+    _watch ??= GxsChangeWatch(token, widget.kind, _load);
     try {
       final on = await content.serviceOn();
       final groups = (on ? await content.groups() : <GxsGroup>[])

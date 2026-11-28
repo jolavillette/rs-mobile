@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/apiUtils/gxs_changes.dart';
 import 'package:retroshare/apiUtils/gxs_content.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 import 'package:retroshare/provider/auth.dart';
@@ -46,6 +47,7 @@ class _ForumViewScreenState extends State<ForumViewScreen> {
   static const _viewKey = 'forum_view';
 
   GxsContent? _content;
+  GxsChangeWatch? _watch;
   GxsAuthorNames? _names;
   bool _loading = true;
   bool _busy = false;
@@ -77,6 +79,12 @@ class _ForumViewScreenState extends State<ForumViewScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
+  @override
+  void dispose() {
+    _watch?.cancel();
+    super.dispose();
+  }
+
   Future<void> _start() async {
     try {
       final saved = (await SharedPreferences.getInstance()).getString(_viewKey);
@@ -95,6 +103,13 @@ class _ForumViewScreenState extends State<ForumViewScreen> {
         Provider.of<AccountCredentials>(context, listen: false).authtoken;
     if (token == null) return;
     final content = _content ??= GxsContent(GxsContentKind.forums, token);
+    // The page follows the posts that arrive; the threads open stay open.
+    _watch ??= GxsChangeWatch(
+      token,
+      GxsContentKind.forums,
+      _load,
+      groupId: widget.group.id,
+    );
     _names ??= GxsAuthorNames(token);
     try {
       final info = await content.groupInfo(widget.group.id);
