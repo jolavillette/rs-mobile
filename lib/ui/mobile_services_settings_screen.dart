@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
@@ -13,10 +14,12 @@ class MobileServicesSettingsScreen extends StatefulWidget {
 
 class _MobileServicesSettingsScreenState
     extends State<MobileServicesSettingsScreen> {
-  static const int _forumsServiceId = 0x0215;
-  static const int _boardsServiceId = 0x0216;
-  static const int _channelsServiceId = 0x0217;
-  static const int _mailsServiceId = 0x0230;
+  // Full service ids: the core matches permissions on those only.
+  static final int _forumsServiceId = rsFullServiceId(RsServiceTypes.forums);
+  static final int _boardsServiceId = rsFullServiceId(RsServiceTypes.boards);
+  static final int _channelsServiceId =
+      rsFullServiceId(RsServiceTypes.channels);
+  static final int _mailsServiceId = rsFullServiceId(RsServiceTypes.gxsMails);
 
   bool _isLoading = true;
   final Map<int, bool> _servicesEnabled = {};
@@ -38,7 +41,7 @@ class _MobileServicesSettingsScreenState
         false,
         authToken,
       );
-      for (final serviceId in const [
+      for (final serviceId in [
         _forumsServiceId,
         _channelsServiceId,
         _boardsServiceId,

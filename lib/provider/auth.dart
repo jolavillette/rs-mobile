@@ -4,14 +4,13 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:retroshare/apiUtils/retroshare_service.dart' as mobile_service;
+import 'package:retroshare/apiUtils/service_ids.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
 String deriveApiToken(String locationId, String password) {
   final bytes = utf8.encode('$locationId:$password');
   return sha256.convert(bytes).toString();
 }
-
-const int _gxsMailsServiceId = 0x0230;
 
 class AccountCredentials with ChangeNotifier {
   List<Account> _accountsList = [];
@@ -113,7 +112,7 @@ class AccountCredentials with ChangeNotifier {
   Future<void> _disableGxsMails(AuthToken token) async {
     try {
       final success = await RsServiceControl.setServiceEnabled(
-        _gxsMailsServiceId,
+        rsFullServiceId(RsServiceTypes.gxsMails),
         false,
         token,
       );
