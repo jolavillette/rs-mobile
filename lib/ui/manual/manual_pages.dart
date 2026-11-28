@@ -255,10 +255,13 @@ groups:
 
 - **Needed by the app**: chats, rooms, identities, the link with your homes
   and what keeps the connections healthy. They cannot be turned off here.
-- **The app works without**: **Discovery** exchanges addresses, keys and
+- **The app can work without**: **Discovery** exchanges addresses, keys and
   versions with your friends. Turned off, the phone no longer learns its
   friends' new addresses nor tells them its own, a friend added with a short
   ID stays unverified, and the friends' versions are no longer shown.
+- **Off unless you turn them on**: **Forums** and **Channels**. The app shows
+  them, but keeping them up to date uses processor, data, battery and
+  storage. They stay off until you turn them on, here or from their page.
 - **No page in the app**: services the app cannot show, such as mail, file
   lists or boards. They are off: they would use processor, data, battery and
   storage for nothing you can see. The app turns them off at every start,

@@ -92,8 +92,8 @@ const neededServices = <MobileService>[
   ),
 ];
 
-/// The services the app works without, on unless the user turns them off in
-/// Services. The core remembers the choice.
+/// The services the app can work without, on unless the user turns them off
+/// in Permissions. The core remembers the choice.
 const switchableServices = <MobileService>[
   MobileService(
     RsServiceTypes.discovery,
@@ -107,9 +107,15 @@ const switchableServices = <MobileService>[
   ),
 ];
 
-/// The services the app has no page for: on a phone they cost CPU, mobile
-/// data, battery or storage for nothing the user can see. The app turns them
-/// off at every login, except those the user turned on in Services.
+/// The optional services the app has a page for: off like the others until
+/// the user turns them on, in Permissions or from their page.
+const servicesWithPage = <int>{RsServiceTypes.forums, RsServiceTypes.channels};
+
+/// The services that stay off unless the user turns them on: on a phone they
+/// cost CPU, mobile data, battery or storage, for nothing the user can see
+/// (no page in the app) or for content not everybody reads (forums,
+/// channels). The app turns them off at every login, except those the user
+/// turned on, in Permissions or from their page.
 const optionalServices = <MobileService>[
   MobileService(
     RsServiceTypes.forums,
