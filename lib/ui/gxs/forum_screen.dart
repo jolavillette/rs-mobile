@@ -55,7 +55,7 @@ class _ForumScreenState extends State<ForumScreen> {
     final names = _names ??= GxsAuthorNames(token);
     try {
       final info = await content.groupInfo(widget.group.id);
-      final metas = await content.postMetas(widget.group.id);
+      final metas = await content.forumPosts(widget.group.id);
       final threads = _threadsOf(metas);
       if (!mounted) return;
       setState(() {
@@ -242,6 +242,9 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
   int _asked = 0;
   bool _loadingMore = false;
 
+  /// For a post shown in an older version, the id of that version.
+  final Map<String, String> _shownVersion = {};
+
   @override
   void initState() {
     super.initState();
@@ -278,6 +281,73 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
     }
     _asked += slice.length;
     if (mounted) setState(() => _loadingMore = false);
+  }
+
+  /// Shows another version of an edited post, as the desktop's version
+  /// list does.
+  Future<void> _showVersion(GxsPostMeta post, String versionId) async {
+    final content = _content;
+    if (content == null) return;
+    try {
+      final loaded = await content.posts(widget.group.id, [versionId]);
+      if (loaded.isEmpty || !mounted) return;
+      setState(() {
+        _bodies[post.id] = loaded.first.body;
+        _shownVersion[post.id] = versionId;
+      });
+    } catch (error) {
+      debugPrint('Forum post $versionId: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not read this version.')),
+        );
+      }
+    }
+  }
+
+  /// Under an edited post: the version shown, and the choice of another.
+  Widget _versions(GxsPostMeta post) {
+    final rs = context.rs;
+    final shownId = _shownVersion[post.id] ?? post.id;
+    final shown = post.versions.firstWhere(
+      (version) => version.id == shownId,
+      orElse: () => post.versions.first,
+    );
+    final latest = shown.id == post.versions.first.id;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: PopupMenuButton<String>(
+        tooltip: 'Versions of this post',
+        onSelected: (versionId) => _showVersion(post, versionId),
+        itemBuilder: (context) => [
+          for (final (index, version) in post.versions.indexed)
+            CheckedPopupMenuItem(
+              value: version.id,
+              checked: version.id == shown.id,
+              child: Text(
+                '${gxsDateTime(version.published)}${index == 0 ? ' (latest)' : ''}',
+              ),
+            ),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.only(top: RsScale.s2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.history, size: 16, color: rs.inkDim),
+              const SizedBox(width: RsScale.s1),
+              Text(
+                '${latest ? 'Edited' : 'Older version'}, '
+                '${gxsDateTime(shown.published)} · '
+                '${post.versions.length} versions',
+                style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
+              ),
+              Icon(Icons.arrow_drop_down, size: 18, color: rs.inkDim),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -333,6 +403,7 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
                   )
                 else
                   GxsBody(body),
+                if (post.versions.length > 1) _versions(post),
               ],
             ),
           );
