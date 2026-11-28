@@ -288,8 +288,8 @@ What RetroShare costs the phone, over the last time in background, the last
   lost in mAh and %, the average current, and the rate per day. This counts
   every application, not RetroShare alone.
 - **RetroShare, as Android counts it**: the battery Android charges to
-  RetroShare, in mAh. Android shows it only to an app it was allowed to
-  from a computer, once:
+  RetroShare, in mAh. This part shows only once Android lets RetroShare
+  read it, which takes a computer with adb, once:
 
 `adb shell pm grant cc.retroshare.retroshare android.permission.BATTERY_STATS`
 
