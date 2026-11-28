@@ -13,6 +13,7 @@ import 'package:retroshare/provider/subscribed.dart';
 import 'package:retroshare/ui/room/message_delegate.dart';
 import 'package:retroshare/ui/room/messages_tab.dart';
 import 'package:retroshare/ui/room/room_friends_tab.dart';
+import 'package:retroshare/ui/room/room_history.dart';
 import 'package:retroshare/ui/room/room_notifications.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,6 +24,7 @@ enum _ChatMenuAction {
   bubble,
   compact,
   participants,
+  history,
   identity,
   notifications,
   invite,
@@ -470,6 +472,13 @@ class RoomScreenState extends State<RoomScreen>
       case _ChatMenuAction.participants:
         _tabController.animateTo(1);
         return;
+      case _ChatMenuAction.history:
+        final lobbyId = widget.chat.chatId;
+        final apiChatId = _apiChatId();
+        if (lobbyId != null && apiChatId != null) {
+          await retrieveRoomHistory(context, lobbyId, apiChatId);
+        }
+        return;
       case _ChatMenuAction.identity:
         await _chooseRoomIdentity();
         return;
@@ -697,6 +706,14 @@ class RoomScreenState extends State<RoomScreen>
                           child: ListTile(
                             leading: Icon(Icons.people_outline),
                             title: Text('Participants'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        const PopupMenuItem<_ChatMenuAction>(
+                          value: _ChatMenuAction.history,
+                          child: ListTile(
+                            leading: Icon(Icons.history),
+                            title: Text('History from friends'),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),

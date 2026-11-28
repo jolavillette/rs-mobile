@@ -2,6 +2,7 @@ import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/provider/auth.dart';
+import 'package:retroshare/ui/room/room_history.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -508,6 +509,28 @@ class ChatSettingsScreenState extends State<ChatSettingsScreen> {
                           child: const Icon(Icons.chat_bubble_rounded,
                               color: Colors.teal),
                         ),
+                      ),
+                      _divider(theme),
+                      ListTile(
+                        title: const Text(
+                          'Friends asked for the history',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text(
+                          'Who sends you the lines of a room you missed. '
+                          'Select only friends you trust.',
+                        ),
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withAlpha(30),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.history_rounded,
+                              color: Colors.purple),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => chooseHistoryFriends(context),
                       ),
                     ],
                   ),
