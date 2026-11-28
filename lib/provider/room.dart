@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
@@ -472,7 +473,13 @@ class RoomChatLobby with ChangeNotifier {
             }
           }
         }
-        return identity?.name ?? lobbyPeerGxsId;
+        if (identity?.name?.isNotEmpty == true) return identity!.name!;
+      }
+      // Not (yet) in the participants we fetched for this lobby: the identity
+      // cache chatIdentityCheck() fills may know the name.
+      final known = _allIdentity[lobbyPeerGxsId]?.name;
+      if (known != null && known.isNotEmpty && known != lobbyPeerGxsId) {
+        return known;
       }
       return lobbyPeerGxsId;
     } else if (message.chatId?.peerId != null ||
@@ -755,6 +762,24 @@ class RoomChatLobby with ChangeNotifier {
     }
   }
 
+  /// Stores the identity [gxsId] in the identity cache when the core knows
+  /// its name; returns whether it did.
+  Future<bool> _cacheIdentityName(String gxsId) async {
+    try {
+      final details = await getIdDetails(gxsId, _authToken);
+      final name = details.item2.name;
+      if (!details.item1 || name == null || name.isEmpty || name == gxsId) {
+        return false;
+      }
+      _allIdentity = Map.from(_allIdentity)..[gxsId] = details.item2;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Could not read identity $gxsId: $e');
+      return false;
+    }
+  }
+
   Future<void> chatIdentityCheck(ChatMessage message) async {
     if (message.msg?.isNotEmpty == true && (message.incoming ?? false)) {
       final lobbyPeerId = message.lobbyPeerGxsId;
@@ -773,6 +798,16 @@ class RoomChatLobby with ChangeNotifier {
               isContact: false,
             ),
           );
+          // requestIdentity() only asks the network for it: read the name
+          // now, and once more a few seconds later when it was not known yet.
+          if (!await _cacheIdentityName(lobbyPeerId)) {
+            unawaited(
+              Future<void>.delayed(
+                const Duration(seconds: 5),
+                () => _cacheIdentityName(lobbyPeerId),
+              ),
+            );
+          }
         }
       } else if (!message.isLobbyMessage() && interlocutorId != null) {
         final identity = _allIdentity[interlocutorId];
