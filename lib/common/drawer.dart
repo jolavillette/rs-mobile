@@ -6,7 +6,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/identicon.dart';
-import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare/provider/subscribed.dart';
@@ -146,16 +145,6 @@ Widget drawerWidget(
                                 FontAwesomeIcons.userPen,
                                 size: 18,
                                 color: Colors.blue,
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () {
-                                showdeleteDialog(context);
-                              },
-                              icon: const FaIcon(
-                                FontAwesomeIcons.trash,
-                                size: 18,
-                                color: Colors.red,
                               ),
                             ),
                           ],

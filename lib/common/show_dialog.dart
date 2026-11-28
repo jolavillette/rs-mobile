@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:retroshare/common/styles.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare/provider/identity.dart';
+import 'package:retroshare_api_wrapper/retroshare.dart' show Identity;
 
 Future errorShowDialog(String title, String text, BuildContext context) {
   return CoolerAlerts.show(
@@ -124,9 +125,13 @@ Stack contentBox(BuildContext context) {
 
 // delete dialog Box
 
-void showdeleteDialog(BuildContext context) {
-  final name =
-      Provider.of<Identities>(context, listen: false).currentIdentity?.name;
+/// Asks before deleting [identity], then deletes it and calls [onDeleted].
+void showdeleteDialog(
+  BuildContext context,
+  Identity identity, {
+  VoidCallback? onDeleted,
+}) {
+  final name = identity.name;
   final ownIdsList =
       Provider.of<Identities>(context, listen: false).ownIdentity;
 
@@ -150,9 +155,10 @@ void showdeleteDialog(BuildContext context) {
               onPressed: () async {
                 try {
                   await Provider.of<Identities>(context, listen: false)
-                      .deleteIdentity()
+                      .deleteIdentity(identity)
                       .then((value) {
                     Navigator.of(context).pop();
+                    onDeleted?.call();
                   });
                 } on HttpException catch (_) {
                   await warningShowDialog(
