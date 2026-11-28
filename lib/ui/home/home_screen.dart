@@ -94,57 +94,84 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  /// Runs one step of the data loading. A failing step is logged and does
+  /// not stop the others: an identity whose details the core has not loaded
+  /// yet must not leave the friends, the invitations or the live chat events
+  /// unloaded. Returns whether the step succeeded.
+  static Future<bool> _loadStep(
+    String name,
+    Future<void> Function() step,
+  ) async {
+    try {
+      await step();
+      return true;
+    } catch (e) {
+      debugPrint('Data loading: $name failed: $e');
+      return false;
+    }
+  }
+
+  /// Loads rooms, identities, friends and invitations, each on its own. The
+  /// providers are looked up before the first await: the screen may be gone
+  /// by the time a step ends.
+  Future<List<String>> _loadData(BuildContext context) async {
+    final chatLobby = Provider.of<ChatLobby>(context, listen: false);
+    final roomChat = Provider.of<RoomChatLobby>(context, listen: false);
+    final friends = Provider.of<FriendLocations>(context, listen: false);
+    final failed = <String>[];
+    for (final (name, step) in <(String, Future<void> Function())>[
+      ('chat rooms', chatLobby.fetchAndUpdate),
+      ('identities', roomChat.fetchAndUpdate),
+      ('friends', friends.fetchfriendLocation),
+      ('invitations', chatLobby.checkForNewInvites),
+    ]) {
+      if (!await _loadStep(name, step)) failed.add(name);
+    }
+    return failed;
+  }
+
   Future<void> _fetchInitialData() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
 
-    try {
-      final chatLobby = Provider.of<ChatLobby>(context, listen: false);
-      await chatLobby.fetchAndUpdate();
-      await Provider.of<RoomChatLobby>(context, listen: false).fetchAndUpdate();
-      await Provider.of<FriendLocations>(context, listen: false)
-          .fetchfriendLocation();
-      await chatLobby.checkForNewInvites();
-      await BadgeHelper.updateAppBadge(context);
-
-      final authToken =
-          Provider.of<AccountCredentials>(context, listen: false).authtoken;
-      if (authToken != null && !_isEventRegistered) {
-        await registerChatEvent(context, authToken);
-        _isEventRegistered = true;
-      }
-    } catch (e) {
-      debugPrint('Error during initial data fetch: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load initial data: $e')),
+    final authToken =
+        Provider.of<AccountCredentials>(context, listen: false).authtoken;
+    final failed = await _loadData(context);
+    if (mounted) {
+      await _loadStep('badge', () => BadgeHelper.updateAppBadge(context));
+    }
+    // The live chat events are registered whatever failed above.
+    if (mounted && authToken != null && !_isEventRegistered) {
+      final registered = await _loadStep(
+        'chat events',
+        () => registerChatEvent(context, authToken),
       );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      if (registered) {
+        _isEventRegistered = true;
+      } else {
+        failed.add('chat events');
       }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+    });
+    if (failed.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load: ${failed.join(', ')}')),
+      );
     }
   }
 
   Future<void> fetchdata(BuildContext context) async {
-    try {
-      final chatLobby = Provider.of<ChatLobby>(context, listen: false);
-      await chatLobby.fetchAndUpdate();
-      await Provider.of<RoomChatLobby>(context, listen: false).fetchAndUpdate();
-      await Provider.of<FriendLocations>(context, listen: false)
-          .fetchfriendLocation();
-      await chatLobby.checkForNewInvites();
-    } catch (e) {
-      debugPrint('Error during fetchdata: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to refresh data: $e')),
-      );
-    }
+    final failed = await _loadData(context);
+    if (!mounted || failed.isEmpty) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not refresh: ${failed.join(', ')}')),
+    );
   }
 
   @override
