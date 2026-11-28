@@ -221,16 +221,6 @@ class _HomeTabState extends State<HomeTab> {
             onPressed: () => showAddFriendDialog(context),
           ),
         ),
-        const SizedBox(height: RsScale.s5),
-        question('Do you need help with RetroShare?'),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.public),
-            label: const Text('Open Web Help'),
-            onPressed: () => widget.open('/web_help'),
-          ),
-        ),
       ],
     );
   }
