@@ -9,6 +9,7 @@ import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/identity.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 import 'package:retroshare/common/rs_tokens.dart';
+import 'package:retroshare/apiUtils/stay_logged_in.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -19,6 +20,10 @@ class SignInScreen extends StatefulWidget {
 
 class SignInScreenState extends State<SignInScreen> {
   TextEditingController passwordController = TextEditingController();
+
+  /// Whether the password is kept on this device after a login.
+  bool stayLoggedIn = false;
+  bool _storedLoginTried = false;
 
   late List<DropdownMenuItem<Account>> accountsDropdown;
   late Account? currentAccount;
@@ -41,6 +46,21 @@ class SignInScreenState extends State<SignInScreen> {
 
     currentAccount = Provider.of<AccountCredentials>(context, listen: false)
         .getlastAccountUsed;
+    unawaited(_tryStoredLogin());
+  }
+
+  /// Logs in with the password kept on this device for the last node used,
+  /// once per display of this screen.
+  Future<void> _tryStoredLogin() async {
+    if (_storedLoginTried || !stayLoggedInAvailable) return;
+    final account = currentAccount;
+    if (account == null) return;
+    _storedLoginTried = true;
+
+    final password = await storedPassword(account.locationId);
+    if (password == null || !mounted) return;
+    setState(() => stayLoggedIn = true);
+    await attemptLogIn(account, password);
   }
 
   @override
@@ -66,6 +86,11 @@ class SignInScreenState extends State<SignInScreen> {
       final authProvider =
           Provider.of<AccountCredentials>(context, listen: false);
       await authProvider.login(currentAccount, password);
+      if (stayLoggedIn) {
+        await storePassword(currentAccount.locationId, password);
+      } else {
+        await forgetPassword(currentAccount.locationId);
+      }
 
       if (!mounted) return;
       final idsProvider = Provider.of<Identities>(context, listen: false)
@@ -269,6 +294,17 @@ class SignInScreenState extends State<SignInScreen> {
     );
   }
 
+  Widget _buildStayLoggedIn() {
+    return CheckboxListTile(
+      value: stayLoggedIn,
+      onChanged: (value) => setState(() => stayLoggedIn = value ?? false),
+      title: const Text('Stay logged in on this device'),
+      controlAffinity: ListTileControlAffinity.leading,
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+    );
+  }
+
   Widget _buildSignInButton() {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
@@ -371,6 +407,7 @@ class SignInScreenState extends State<SignInScreen> {
                         const SizedBox(height: 15),
                         _buildPasswordField(),
                         _buildWrongPasswordError(),
+                        if (stayLoggedInAvailable) _buildStayLoggedIn(),
                         const SizedBox(height: 25),
                         _buildSignInButton(),
                         const SizedBox(height: 15),

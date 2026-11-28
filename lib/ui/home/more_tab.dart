@@ -1,11 +1,12 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:retroshare/common/logout.dart';
 import 'package:retroshare/common/quit.dart';
 import 'package:retroshare/common/rs_tokens.dart';
 
 /// More: Preferences (named and ordered as the desktop's), Statistics and,
-/// on Android, Quit.
+/// on Android, Quit; on iOS, Log out.
 class MoreTab extends StatelessWidget {
   const MoreTab({required this.open, super.key});
 
@@ -33,6 +34,12 @@ class MoreTab extends StatelessWidget {
             leading: Icon(Icons.power_settings_new, color: context.rs.downInk),
             title: Text('Quit', style: TextStyle(color: context.rs.downInk)),
             onTap: () => confirmAndQuit(context),
+          ),
+        if (Platform.isIOS)
+          ListTile(
+            leading: Icon(Icons.logout, color: context.rs.downInk),
+            title: Text('Log out', style: TextStyle(color: context.rs.downInk)),
+            onTap: () => confirmAndLogOut(context),
           ),
       ],
     );
