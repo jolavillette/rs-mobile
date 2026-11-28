@@ -12,7 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:retroshare/common/color_loader_3.dart';
+import 'package:retroshare/common/busy_indicator.dart';
 import 'package:retroshare/common/styles.dart';
 import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/provider/friend_location.dart';
@@ -443,10 +443,7 @@ class QRScannerState extends State<QRScanner>
             Visibility(
               visible: _requestQR,
               child: const Center(
-                child: ColorLoader3(
-                  radius: 15,
-                  dotRadius: 6,
-                ),
+                child: BusyIndicator(),
               ),
             ),
           ],

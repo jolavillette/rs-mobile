@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:provider/provider.dart';
-import 'package:retroshare/common/color_loader_3.dart';
+import 'package:retroshare/common/busy_indicator.dart';
 import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/model/http_exception.dart';
 import 'package:retroshare/provider/friend_location.dart';
@@ -144,10 +144,7 @@ class GetAddfriendState extends State<GetAddfriend> {
         Center(
           child: Visibility(
             visible: _requestAddCert,
-            child: const ColorLoader3(
-              radius: 15,
-              dotRadius: 6,
-            ),
+            child: const BusyIndicator(),
           ),
         ),
       ],

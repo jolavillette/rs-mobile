@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/common/bottom_bar.dart';
-import 'package:retroshare/common/color_loader_3.dart';
+import 'package:retroshare/common/busy_indicator.dart';
 import 'package:retroshare/common/identicon.dart';
 import 'package:retroshare/common/image_picker_dialog.dart';
 import 'package:retroshare/common/styles.dart';
@@ -283,7 +283,7 @@ class GenericIdentityTabState extends State<GenericIdentityTab> {
           ),
         if (_isLoading)
           const Center(
-            child: ColorLoader3(),
+            child: BusyIndicator(),
           ),
       ],
     );

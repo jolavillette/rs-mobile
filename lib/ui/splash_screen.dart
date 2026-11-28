@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:retroshare/apiUtils/retroshare_service.dart';
-import 'package:retroshare/common/color_loader_3.dart';
+import 'package:retroshare/common/busy_indicator.dart';
 import 'package:retroshare/common/rs_logo.dart';
 import 'package:retroshare/common/show_dialog.dart';
 import 'package:retroshare/provider/auth.dart';
@@ -146,10 +146,7 @@ class SplashState extends State<SplashScreen> {
   Widget _buildSpinner() {
     return Visibility(
       visible: _spinner,
-      child: const ColorLoader3(
-        radius: 15,
-        dotRadius: 6,
-      ),
+      child: const BusyIndicator(),
     );
   }
 
