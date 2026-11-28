@@ -146,8 +146,8 @@ class _Period {
 }
 
 /// The Battery tab of Statistics. What RetroShare does to the battery: its
-/// own activity, the battery of the whole phone and, when adb granted the
-/// permissions, what Android charges to the application; over the last time
+/// own activity, the battery of the whole phone and, when Android lets the
+/// application read it, what Android charges to it; over the last time
 /// in background, 24 hours and 7 days. Pulled down, it measures again.
 class EnergyView extends StatefulWidget {
   const EnergyView({super.key});
@@ -162,7 +162,6 @@ class _EnergyViewState extends State<EnergyView> {
   bool _loading = true;
   bool _available = true;
   bool _powerPermissions = false;
-  String _packageName = '';
   List<_Period> _periods = const [];
 
   @override
@@ -177,7 +176,6 @@ class _EnergyViewState extends State<EnergyView> {
     try {
       _powerPermissions =
           await _channel.invokeMethod<bool>('powerPermissions') ?? false;
-      _packageName = await _channel.invokeMethod<String>('packageName') ?? '';
       // The service writes a fresh line; reading the system's battery
       // statistics for it takes a few seconds when permitted.
       final asked = await _channel.invokeMethod<bool>('sample') ?? false;
@@ -257,7 +255,6 @@ class _EnergyViewState extends State<EnergyView> {
             )
           else
             for (final period in _periods) _periodCard(period),
-          if (_available && !_powerPermissions && !_loading) _grantCard(),
         ],
       ),
     );
@@ -333,13 +330,17 @@ class _EnergyViewState extends State<EnergyView> {
         );
       }
 
-      header('RetroShare, as Android counts it');
-      if (p.powerMs <= 0) {
-        row('Used', _powerPermissions ? 'not measured yet' : 'not permitted');
-      } else {
-        row('Counted over', _duration(p.powerMs));
-        row('Used', '${_decimal(p.appMah)} mAh');
-        row('Average', '${_decimal(p.appMah / p.powerHours)} mAh/h');
+      // Android shows what it charges to each application only to an
+      // application allowed to read it; without that, the section is left out.
+      if (_powerPermissions) {
+        header('RetroShare, as Android counts it');
+        if (p.powerMs <= 0) {
+          row('Used', 'not measured yet');
+        } else {
+          row('Counted over', _duration(p.powerMs));
+          row('Used', '${_decimal(p.appMah)} mAh');
+          row('Average', '${_decimal(p.appMah / p.powerHours)} mAh/h');
+        }
       }
     }
 
@@ -361,24 +362,6 @@ class _EnergyViewState extends State<EnergyView> {
             const SizedBox(height: 8),
             ...rows,
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _grantCard() {
-    final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SelectableText(
-          'Android keeps to itself what it charges to each application. '
-          'To show it here, grant it once from a computer:\n\n'
-          'adb shell pm grant $_packageName android.permission.BATTERY_STATS\n'
-          'adb shell pm grant $_packageName android.permission.DUMP',
-          style: theme.textTheme.bodySmall,
         ),
       ),
     );

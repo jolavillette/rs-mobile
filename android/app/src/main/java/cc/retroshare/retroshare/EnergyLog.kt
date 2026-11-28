@@ -228,7 +228,6 @@ object EnergyLog {
                         result.success(if (file.exists()) file.readText() else "")
                     }
                     "powerPermissions" -> result.success(hasPowerPermissions(app))
-                    "packageName" -> result.success(app.packageName)
                     else -> result.notImplemented()
                 }
             }
