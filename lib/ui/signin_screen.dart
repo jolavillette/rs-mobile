@@ -54,7 +54,7 @@ class SignInScreenState extends State<SignInScreen> {
       context,
       '/',
       arguments: {
-        'statusText': 'Attempt login...\nCrypto in course',
+        'statusText': 'Logging in...',
         'isLoading': true,
         'spinner': true,
       },
