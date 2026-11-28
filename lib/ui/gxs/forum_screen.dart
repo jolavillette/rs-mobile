@@ -7,6 +7,7 @@ import 'package:retroshare/provider/auth.dart';
 import 'package:retroshare/ui/gxs/gxs_body.dart';
 import 'package:retroshare/ui/gxs/gxs_group_bar.dart';
 import 'package:retroshare/ui/gxs/gxs_group_menu.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// A thread of a forum: the post that starts it and its answers.
 class ForumThread {
@@ -56,7 +57,7 @@ class _ForumScreenState extends State<ForumScreen> {
     final names = _names ??= GxsAuthorNames(token);
     try {
       final info = await content.groupInfo(widget.group.id);
-      final metas = await content.postMetas(widget.group.id);
+      final metas = await content.forumPosts(widget.group.id);
       final threads = _threadsOf(metas);
       if (!mounted) return;
       setState(() {
@@ -222,8 +223,9 @@ class _ForumScreenState extends State<ForumScreen> {
   }
 }
 
-/// The posts of a thread, oldest first. Their text is read from the core a
-/// few posts at a time, and a post shown is marked as read.
+/// The posts of a thread, in either view of the desktop: threaded, each
+/// answer under the post it answers, or flat, oldest first. Their text is read
+/// from the core a few posts at a time, and a post shown is marked as read.
 class ForumThreadScreen extends StatefulWidget {
   const ForumThreadScreen({
     required this.group,
@@ -247,14 +249,88 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
   int _asked = 0;
   bool _loadingMore = false;
 
+  /// For a post shown in an older version, the id of that version.
+  final Map<String, String> _shownVersion = {};
+
+  // The view chosen last, as the desktop keeps it; threaded at first.
+  static const _threadedKey = 'forum_threaded_view';
+  bool _threaded = true;
+  List<GxsPostMeta> _order = const [];
+  Map<String, int> _depth = const {};
+
+  /// The posts in the order of the view, with how deep each one answers.
+  void _arrange() {
+    final posts = widget.thread.posts;
+    final ids = {for (final post in posts) post.id};
+    final answers = <String, List<GxsPostMeta>>{};
+    for (final post in posts) {
+      if (ids.contains(post.parentId)) {
+        answers.putIfAbsent(post.parentId, () => []).add(post);
+      }
+    }
+    final depth = <String, int>{};
+    final order = <GxsPostMeta>[];
+    void walk(GxsPostMeta post, int level) {
+      if (depth.containsKey(post.id)) return;
+      depth[post.id] = level;
+      order.add(post);
+      for (final answer in answers[post.id] ?? const <GxsPostMeta>[]) {
+        walk(answer, level + 1);
+      }
+    }
+
+    // The posts list is oldest first, so are the answers to each post.
+    for (final post in posts) {
+      if (!ids.contains(post.parentId)) walk(post, 0);
+    }
+    _depth = depth;
+    _order = _threaded ? order : posts;
+  }
+
+  /// Switches the view. The posts whose text is read already stay read.
+  Future<void> _setThreaded(bool threaded) async {
+    if (threaded == _threaded) return;
+    setState(() {
+      _threaded = threaded;
+      _arrange();
+      _asked = _order.takeWhile((post) => _bodies.containsKey(post.id)).length;
+    });
+    if (_asked == 0) await _loadMore();
+    try {
+      await (await SharedPreferences.getInstance())
+          .setBool(_threadedKey, threaded);
+    } catch (error) {
+      debugPrint('Cannot keep the forum view: $error');
+    }
+  }
+
+  Future<void> _start() async {
+    try {
+      final saved =
+          (await SharedPreferences.getInstance()).getBool(_threadedKey);
+      if (saved != null) _threaded = saved;
+    } catch (error) {
+      debugPrint('Cannot read the forum view: $error');
+    }
+    if (!mounted) return;
+    setState(_arrange);
+    await _loadMore();
+  }
+
+  /// How far an answer is moved right in the threaded view: a step per
+  /// level, at most five, so that deep threads stay readable on a phone.
+  double _indent(GxsPostMeta post) =>
+      _threaded ? (_depth[post.id] ?? 0).clamp(0, 5) * RsScale.s4 : 0;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+    _arrange();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
   Future<void> _loadMore() async {
-    final posts = widget.thread.posts;
+    final posts = _order;
     if (_loadingMore || _asked >= posts.length) return;
     final token =
         Provider.of<AccountCredentials>(context, listen: false).authtoken;
@@ -285,10 +361,77 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
     if (mounted) setState(() => _loadingMore = false);
   }
 
+  /// Shows another version of an edited post, as the desktop's version
+  /// list does.
+  Future<void> _showVersion(GxsPostMeta post, String versionId) async {
+    final content = _content;
+    if (content == null) return;
+    try {
+      final loaded = await content.posts(widget.group.id, [versionId]);
+      if (loaded.isEmpty || !mounted) return;
+      setState(() {
+        _bodies[post.id] = loaded.first.body;
+        _shownVersion[post.id] = versionId;
+      });
+    } catch (error) {
+      debugPrint('Forum post $versionId: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not read this version.')),
+        );
+      }
+    }
+  }
+
+  /// Under an edited post: the version shown, and the choice of another.
+  Widget _versions(GxsPostMeta post) {
+    final rs = context.rs;
+    final shownId = _shownVersion[post.id] ?? post.id;
+    final shown = post.versions.firstWhere(
+      (version) => version.id == shownId,
+      orElse: () => post.versions.first,
+    );
+    final latest = shown.id == post.versions.first.id;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: PopupMenuButton<String>(
+        tooltip: 'Versions of this post',
+        onSelected: (versionId) => _showVersion(post, versionId),
+        itemBuilder: (context) => [
+          for (final (index, version) in post.versions.indexed)
+            CheckedPopupMenuItem(
+              value: version.id,
+              checked: version.id == shown.id,
+              child: Text(
+                '${gxsDateTime(version.published)}${index == 0 ? ' (latest)' : ''}',
+              ),
+            ),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.only(top: RsScale.s2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.history, size: 16, color: rs.inkDim),
+              const SizedBox(width: RsScale.s1),
+              Text(
+                '${latest ? 'Edited' : 'Older version'}, '
+                '${gxsDateTime(shown.published)} · '
+                '${post.versions.length} versions',
+                style: TextStyle(fontSize: RsScale.tMeta, color: rs.inkDim),
+              ),
+              Icon(Icons.arrow_drop_down, size: 18, color: rs.inkDim),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final rs = context.rs;
-    final posts = widget.thread.posts;
+    final posts = _order;
     final shown = _asked.clamp(0, posts.length);
     return Scaffold(
       appBar: AppBar(
@@ -297,6 +440,27 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
               ? widget.group.name
               : widget.thread.root.title,
         ),
+        actions: [
+          PopupMenuButton<bool>(
+            tooltip: 'View',
+            icon: Icon(
+              _threaded ? Icons.account_tree_outlined : Icons.view_agenda_outlined,
+            ),
+            onSelected: _setThreaded,
+            itemBuilder: (context) => [
+              CheckedPopupMenuItem(
+                value: true,
+                checked: _threaded,
+                child: const Text('Threaded view'),
+              ),
+              CheckedPopupMenuItem(
+                value: false,
+                checked: !_threaded,
+                child: const Text('Flat view'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: RsScale.s2),
@@ -320,9 +484,11 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
           final body = _bodies[post.id];
           final author = _names?.identityOf(post.authorId);
           return Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: RsScale.s4,
-              vertical: RsScale.s3,
+            padding: EdgeInsets.fromLTRB(
+              RsScale.s4 + _indent(post),
+              RsScale.s3,
+              RsScale.s4,
+              RsScale.s3,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,6 +519,7 @@ class _ForumThreadScreenState extends State<ForumThreadScreen> {
                   )
                 else
                   GxsBody(body),
+                if (post.versions.length > 1) _versions(post),
               ],
             ),
           );

@@ -15,6 +15,7 @@ import 'package:retroshare/ui/friend_location_detail_screen.dart';
 import 'package:retroshare/ui/friends_locations_screen.dart';
 import 'package:retroshare/ui/gxs/channel_screen.dart';
 import 'package:retroshare/ui/gxs/forum_screen.dart';
+import 'package:retroshare/ui/gxs/forum_view.dart';
 import 'package:retroshare/ui/gxs/gxs_groups_screen.dart';
 import 'package:retroshare/ui/home/home_screen.dart';
 import 'package:retroshare/ui/launch_transition_screen.dart';
@@ -177,7 +178,9 @@ class RouteGenerator {
         );
       case '/forum':
         if (args is GxsGroup) {
-          return MaterialPageRoute(builder: (_) => ForumScreen(group: args));
+          return MaterialPageRoute(
+            builder: (_) => ForumViewScreen(group: args),
+          );
         }
         return _errorRoute();
       case '/channel':

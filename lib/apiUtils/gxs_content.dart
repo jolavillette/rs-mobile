@@ -35,6 +35,9 @@ const int _subscribeAdmin = 0x01;
 const int _subscribeSubscribed = 0x04;
 const int _statusUnread = 0x02;
 
+// ForumPostEntry::FLAG_POST_IS_MISSING.
+const int _postMissing = 0x0002;
+
 /// A 64-bit number comes as a number or as {xint64, xstr64}.
 int _int(Object? value) {
   if (value is int) return value;
@@ -106,7 +109,22 @@ class GxsPostMeta {
         authorId = _str(meta['mAuthorId']),
         title = _str(meta['mMsgName']),
         published = _int(meta['mPublishTs']),
-        status = _int(meta['mMsgStatus']);
+        status = _int(meta['mMsgStatus']),
+        missing = false,
+        versions = const [];
+
+  /// A post of the forum hierarchy the core computes.
+  GxsPostMeta._entry({
+    required this.id,
+    required this.threadId,
+    required this.parentId,
+    required this.authorId,
+    required this.title,
+    required this.published,
+    required this.status,
+    required this.missing,
+    required this.versions,
+  }) : origId = id;
 
   final String id;
   final String origId;
@@ -118,6 +136,13 @@ class GxsPostMeta {
   /// Seconds since the epoch.
   final int published;
   int status;
+
+  /// Answered but not on this node: no content, no author.
+  final bool missing;
+
+  /// The versions of a forum post, newest first, the one in [id] included;
+  /// empty when the post was never edited.
+  final List<GxsPostVersion> versions;
 
   bool get unread => status & _statusUnread != 0;
 
@@ -135,6 +160,16 @@ class GxsFile {
   final String name;
   final String hash;
   final int size;
+}
+
+/// One version of an edited forum post.
+class GxsPostVersion {
+  GxsPostVersion(this.id, this.published);
+
+  final String id;
+
+  /// Seconds since the epoch.
+  final int published;
 }
 
 /// A post with its content.
@@ -278,6 +313,64 @@ class GxsContent {
         .map(GxsPostMeta.fromJson)
         .where((meta) => meta.id.isNotEmpty);
     return _latestVersions(_forums ? metas : metas.where((m) => m.isRoot));
+  }
+
+  /// The posts of a forum as the desktop shows them, put together by the
+  /// core: one entry per post, its most recent valid version (edited by its
+  /// author or a moderator), each answer under the post it answers, also when
+  /// it answers an older version. A post that is answered but not on this
+  /// node is an entry marked missing.
+  Future<List<GxsPostMeta>> forumPosts(String groupId) async {
+    final info = await _call('getForumsInfo', {
+      'forumIds': [groupId],
+    });
+    final forums = _maps(info['forumsInfo']);
+    if (forums.isEmpty) throw Exception('Could not read the forum');
+    final response =
+        await _call('getForumPostsHierarchy', {'group': forums.first});
+    if (!_succeeded(response)) throw Exception('Could not read the posts');
+    final entries = _maps(response['vect']);
+    // Keyed by the most recent version, the versions newest first.
+    final versions = <String, List<GxsPostVersion>>{
+      for (final pair in _maps(response['post_versions']))
+        _str(pair['key']): [
+          for (final version in _maps(pair['value']))
+            GxsPostVersion(_str(version['second']), _int(version['first'])),
+        ],
+    };
+    int parentOf(int index) {
+      final parent = _int(entries[index]['mParent']);
+      return parent > 0 && parent < entries.length ? parent : 0;
+    }
+
+    final posts = <GxsPostMeta>[];
+    // Entry 0 is the sentinel the first posts of the threads hang from.
+    for (var index = 1; index < entries.length; index++) {
+      final entry = entries[index];
+      var top = index;
+      for (var depth = 0; depth < entries.length; depth++) {
+        final parent = parentOf(top);
+        if (parent == 0) break;
+        top = parent;
+      }
+      final id = _str(entry['mMsgId']);
+      final parent = parentOf(index);
+      final missing = _int(entry['mPostFlags']) & _postMissing != 0;
+      posts.add(
+        GxsPostMeta._entry(
+          id: id,
+          threadId: _str(entries[top]['mMsgId']),
+          parentId: parent == 0 ? '' : _str(entries[parent]['mMsgId']),
+          authorId: missing ? '' : _str(entry['mAuthorId']),
+          title: missing ? '(post not received)' : _str(entry['mTitle']),
+          published: _int(entry['mPublishTs']),
+          status: missing ? 0 : _int(entry['mMsgStatus']),
+          missing: missing,
+          versions: versions[id] ?? const [],
+        ),
+      );
+    }
+    return posts;
   }
 
   /// The content of some posts of a group. Ask for few at a time: a post may
@@ -454,6 +547,17 @@ String gxsDate(int secondsSinceEpoch) {
   }
   final day = '${date.day} ${months[date.month - 1]}';
   return date.year == now.year ? day : '$day ${date.year}';
+}
+
+/// "27 Nov 14:05", "today 14:05": for versions of a post, often minutes
+/// apart.
+String gxsDateTime(int secondsSinceEpoch) {
+  final day = gxsDate(secondsSinceEpoch);
+  if (day.isEmpty) return '';
+  final date = DateTime.fromMillisecondsSinceEpoch(secondsSinceEpoch * 1000);
+  String two(int n) => n.toString().padLeft(2, '0');
+  final time = '${two(date.hour)}:${two(date.minute)}';
+  return day == time ? 'today $time' : '$day $time';
 }
 
 /// "1.2 MB".
