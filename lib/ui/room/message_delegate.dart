@@ -114,21 +114,18 @@ class MessageDelegate extends StatelessWidget {
     final isIncoming = data.incoming ?? true;
 
     // RetroShare Chat Flags
-    const rsChatFlagsHistory = 0x0004;
     const rsChatFlagsSystem = 0x0008;
 
-    final isHistory = ((data.chatflags ?? 0) & rsChatFlagsHistory) != 0;
     final isSystem = ((data.chatflags ?? 0) & rsChatFlagsSystem) != 0;
     final isOffline = data.online == false;
 
-    // Determine colors based on flags and state
+    // Determine colors based on flags and state. A line reloaded from the
+    // history (when the chat opens, or retrieved from friends) keeps the
+    // colours of its side: in a room nearly every line comes from there.
     Color bubbleColor;
     Color borderColor;
 
-    if (isHistory) {
-      bubbleColor = const Color(0xFFE5E5E5);
-      borderColor = const Color(0xFFB0B0B0);
-    } else if (isSystem) {
+    if (isSystem) {
       bubbleColor = const Color(0xFFFFD43D);
       borderColor = const Color(0xFFC9A200);
     } else if (isIncoming) {
