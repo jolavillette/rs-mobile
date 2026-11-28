@@ -1137,6 +1137,7 @@ class MessagesTabState extends State<MessagesTab> {
                           data: message,
                           bubbleTitle: bubbleTitle,
                           style: widget.bubbleStyle,
+                          colourByAuthor: widget.isRoom ?? false,
                         );
                       },
                     ),
