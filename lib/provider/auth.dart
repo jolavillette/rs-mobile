@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:retroshare/apiUtils/mobile_services.dart';
 import 'package:retroshare/apiUtils/retroshare_service.dart' as mobile_service;
+import 'package:retroshare/apiUtils/turtle_relay.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
 String deriveApiToken(String locationId, String password) {
@@ -88,6 +89,7 @@ class AccountCredentials with ChangeNotifier {
 
       if (await RsJsonApi.isAuthTokenValid(token)) {
         await turnOffOptionalServices(token, account.locationId);
+        await applyTurtleRelay(token, account.locationId);
         return true;
       }
 
@@ -99,6 +101,7 @@ class AccountCredentials with ChangeNotifier {
         );
         if (await RsJsonApi.isAuthTokenValid(token)) {
           await turnOffOptionalServices(token, account.locationId);
+          await applyTurtleRelay(token, account.locationId);
           return true;
         }
       } catch (error) {
@@ -268,6 +271,7 @@ class AccountCredentials with ChangeNotifier {
       final locationId = createResp['locationId']?.toString();
       if (locationId != null) {
         await turnOffOptionalServices(_authToken!, locationId);
+        await applyTurtleRelay(_authToken!, locationId);
       }
       await fetchAuthAccountList();
 
