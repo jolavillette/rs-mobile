@@ -29,7 +29,7 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen> {
   // The bottom navigation of the web UI: Home, Network, People, Chat, More.
-  static const _peopleTab = 2, _chatTab = 3;
+  static const _chatTab = 3;
   int _tab = _chatTab;
   bool _desktop = false;
   bool _isInit = true;
@@ -202,14 +202,6 @@ class HomeScreenState extends State<HomeScreen> {
 
   List<Widget> _actions() {
     switch (_tab) {
-      case _peopleTab:
-        return [
-          IconButton(
-            tooltip: 'Change the active identity',
-            icon: const Icon(Icons.swap_horiz),
-            onPressed: () => _open('/change_identity'),
-          ),
-        ];
       case _chatTab:
         return [
           IconButton(
@@ -235,12 +227,6 @@ class HomeScreenState extends State<HomeScreen> {
 
   Widget? _fab() {
     switch (_tab) {
-      case _peopleTab:
-        return FloatingActionButton(
-          tooltip: 'New identity',
-          onPressed: () => _open('/create_identity'),
-          child: const Icon(Icons.add),
-        );
       case _chatTab:
         return FloatingActionButton(
           tooltip: 'New chat room',
@@ -290,7 +276,10 @@ class HomeScreenState extends State<HomeScreen> {
                 open: _open,
                 onOpenPeerChat: desktop ? _openPeerChat : null,
               ),
-              PeopleTab(open: _open),
+              PeopleTab(
+                open: _open,
+                onOpenRoom: desktop ? _openRoom : null,
+              ),
               ChatsTab(
                 onOpenRoom: desktop ? _openRoom : null,
                 onOpenPeerChat: desktop ? _openPeerChat : null,
