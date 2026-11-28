@@ -10,9 +10,9 @@ import 'package:retroshare/provider/room.dart';
 import 'package:retroshare/provider/subscribed.dart';
 import 'package:retroshare/routes.dart';
 import 'package:retroshare/ui/home/chats_tab.dart';
-import 'package:retroshare/ui/home/friends_tab.dart';
 import 'package:retroshare/ui/home/home_tab.dart';
 import 'package:retroshare/ui/home/more_tab.dart';
+import 'package:retroshare/ui/home/network_tab.dart';
 import 'package:retroshare/ui/home/people_tab.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart' show Chat, Location;
 import 'package:retroshare/common/rs_tokens.dart';
@@ -29,7 +29,7 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen> {
   // The bottom navigation of the web UI: Home, Network, People, Chat, More.
-  static const _networkTab = 1, _peopleTab = 2, _chatTab = 3;
+  static const _peopleTab = 2, _chatTab = 3;
   int _tab = _chatTab;
   bool _desktop = false;
   bool _isInit = true;
@@ -202,19 +202,6 @@ class HomeScreenState extends State<HomeScreen> {
 
   List<Widget> _actions() {
     switch (_tab) {
-      case _networkTab:
-        return [
-          IconButton(
-            tooltip: 'Search',
-            icon: const Icon(Icons.search),
-            onPressed: () => _open('/search', arguments: 1),
-          ),
-          IconButton(
-            tooltip: "Friends' devices",
-            icon: const Icon(Icons.devices_outlined),
-            onPressed: () => _open('/friends_locations'),
-          ),
-        ];
       case _peopleTab:
         return [
           IconButton(
@@ -248,12 +235,6 @@ class HomeScreenState extends State<HomeScreen> {
 
   Widget? _fab() {
     switch (_tab) {
-      case _networkTab:
-        return FloatingActionButton(
-          tooltip: 'Add a friend',
-          onPressed: () => _open('/add_friend'),
-          child: const Icon(Icons.person_add_alt),
-        );
       case _peopleTab:
         return FloatingActionButton(
           tooltip: 'New identity',
@@ -305,7 +286,10 @@ class HomeScreenState extends State<HomeScreen> {
             index: _tab,
             children: [
               HomeTab(open: _open),
-              FriendsTab(onOpenRoom: desktop ? _openRoom : null),
+              NetworkTab(
+                open: _open,
+                onOpenPeerChat: desktop ? _openPeerChat : null,
+              ),
               PeopleTab(open: _open),
               ChatsTab(
                 onOpenRoom: desktop ? _openRoom : null,
