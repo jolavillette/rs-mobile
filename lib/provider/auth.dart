@@ -9,6 +9,7 @@ import 'package:retroshare/apiUtils/mobile_services.dart';
 import 'package:retroshare/apiUtils/retroshare_service.dart' as mobile_service;
 import 'package:retroshare/apiUtils/turtle_relay.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 String deriveApiToken(String locationId, String password) {
   final bytes = utf8.encode('$locationId:$password');
@@ -29,6 +30,35 @@ class AccountCredentials with ChangeNotifier {
 
   set logginAccount(Account acc) {
     _loggedinAccount = acc;
+    _rememberAccount(acc);
+  }
+
+  static const _lastLocationKey = 'last_location_id';
+
+  /// The node last logged in is the one the sign-in screen offers first, as
+  /// on the desktop. Kept on the device: before a login the core cannot say
+  /// which one it was.
+  void _rememberAccount(Account acc) {
+    _lastAccountUsed = acc;
+    SharedPreferences.getInstance()
+        .then((prefs) => prefs.setString(_lastLocationKey, acc.locationId))
+        .catchError((Object e) {
+      debugPrint('Cannot remember the last node: $e');
+      return false;
+    });
+  }
+
+  Future<Account?> _rememberedAccount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final id = prefs.getString(_lastLocationKey);
+      for (final account in _accountsList) {
+        if (account.locationId == id) return account;
+      }
+    } catch (e) {
+      debugPrint('Cannot read the last node: $e');
+    }
+    return null;
   }
 
   AuthToken? get authtoken => _authToken;
@@ -51,8 +81,8 @@ class AccountCredentials with ChangeNotifier {
       });
       _accountsList = [];
       _accountsList = accountsList;
-      notifyListeners();
       _lastAccountUsed = await setLastAccountUsed();
+      notifyListeners();
     } catch (e) {
       throw HttpException(e.toString());
     }
@@ -61,13 +91,15 @@ class AccountCredentials with ChangeNotifier {
   Account? get getlastAccountUsed => _lastAccountUsed;
 
   Future<Account?> setLastAccountUsed() async {
+    final remembered = await _rememberedAccount();
     if (_authToken == null) {
-      return null;
+      return remembered;
     }
     final currAccount = await RsAccounts.getCurrentAccountId(_authToken!);
     for (final account in _accountsList) {
       if (account.locationId == currAccount) return account;
     }
+    if (remembered != null) return remembered;
     // Return the first account if available, otherwise throw
     if (_accountsList.isNotEmpty) {
       return _accountsList.first;
@@ -297,7 +329,7 @@ class AccountCredentials with ChangeNotifier {
         );
       }
       _loggedinAccount = importedAccount;
-      _lastAccountUsed = importedAccount;
+      _rememberAccount(importedAccount);
       notifyListeners();
     } catch (e) {
       if (e is HttpException) rethrow;
