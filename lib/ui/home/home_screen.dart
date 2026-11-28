@@ -38,7 +38,7 @@ class HomeScreenState extends State<HomeScreen> {
   bool _isInit = true;
   bool _isLoading = false;
   bool _isEventRegistered = false;
-  Timer? _inviteCheckTimer;
+  late final _onResume = _OnResume(_checkInvites);
   final GlobalKey<NavigatorState> _desktopNavigatorKey =
       GlobalKey<NavigatorState>();
 
@@ -69,12 +69,16 @@ class HomeScreenState extends State<HomeScreen> {
     _isInit = true;
     _restoreTab();
 
-    // Start periodic invite check
-    _inviteCheckTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
-      if (mounted) {
-        Provider.of<ChatLobby>(context, listen: false).checkForNewInvites();
-      }
-    });
+    // The core announces each invitation to a room as an event (see
+    // registerChatEvent); the list is read again when the app comes back to
+    // the foreground, in case one came while the events were not followed.
+    WidgetsBinding.instance.addObserver(_onResume);
+  }
+
+  void _checkInvites() {
+    if (mounted) {
+      Provider.of<ChatLobby>(context, listen: false).checkForNewInvites();
+    }
   }
 
   @override
@@ -200,7 +204,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _inviteCheckTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(_onResume);
     // Remove listeners to avoid memory leaks
     try {
       Provider.of<ChatLobby>(context, listen: false)
@@ -399,5 +403,17 @@ class HomeScreenState extends State<HomeScreen> {
         },
       ),
     );
+  }
+}
+
+/// Calls back each time the application comes back to the foreground.
+class _OnResume with WidgetsBindingObserver {
+  _OnResume(this.callback);
+
+  final VoidCallback callback;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) callback();
   }
 }
