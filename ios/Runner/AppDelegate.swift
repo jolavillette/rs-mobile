@@ -28,11 +28,33 @@ import UIKit
       rsChannel = channel
     }
 
+    // Push: the key the home nodes seal messages with, and the address Apple
+    // gives this installation. Without the push entitlement the registration
+    // fails and the token stays unknown.
+    _ = PushSeal.key()
+    application.registerForRemoteNotifications()
+
     NotificationCenter.default.addObserver(
       self, selector: #selector(holdBackgroundTime),
       name: UIApplication.didEnterBackgroundNotification, object: nil)
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    PushSeal.deviceToken = deviceToken.map { String(format: "%02x", $0) }.joined()
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    NSLog("RetroShare: no push token: %@", error.localizedDescription)
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
   }
 
   /// iOS suspends the process right after it leaves the screen. The application
@@ -90,6 +112,8 @@ import UIKit
     case "jsonApiPort":
       // The interface asks where this application's core listens.
       result(Int(AppDelegate.jsonApiPort))
+    case "pushRegistration":
+      result(AppDelegate.pushRegistration())
     case "secretSet":
       let arguments = call.arguments as? [String: Any]
       if let name = arguments?["name"] as? String, let value = arguments?["value"] as? String {
@@ -106,6 +130,23 @@ import UIKit
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  /// What a home node needs to push to this phone. In the simulator, which
+  /// gets no token from Apple, the address is the simulator itself: a sender
+  /// running on the same Mac delivers with `simctl push`.
+  private static func pushRegistration() -> [String: Any] {
+    var registration: [String: Any] = [
+      "provider": "apns",
+      "token": PushSeal.deviceToken as Any? ?? NSNull(),
+      "topic": Bundle.main.bundleIdentifier ?? "",
+      "key": PushSeal.key()?.base64EncodedString() as Any? ?? NSNull(),
+    ]
+    #if targetEnvironment(simulator)
+      registration["provider"] = "simctl"
+      registration["token"] = ProcessInfo.processInfo.environment["SIMULATOR_UDID"] as Any? ?? NSNull()
+    #endif
+    return registration
   }
 
   /// The profiles live in Application Support inside the sandbox.

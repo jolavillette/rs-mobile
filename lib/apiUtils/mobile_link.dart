@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:retroshare/apiUtils/mobile_push.dart';
 import 'package:retroshare_api_wrapper/retroshare.dart';
 
 // MobileLink: the phone asks the friends that run it to spare its battery
@@ -26,6 +27,7 @@ Future<void> applyPhoneMode(AuthToken token) async {
       params: {'phone': true},
     );
     debugPrint('MobileLink: phone mode on');
+    await applyPushRegistration(token);
   } catch (error) {
     debugPrint('MobileLink: /rsMobileLink/setPhoneMode failed: $error');
   }

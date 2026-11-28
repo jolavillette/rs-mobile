@@ -1,0 +1,4 @@
+// The notification extension takes its version numbers from Flutter, so that
+// they always match the application's.
+#include "../Flutter/Generated.xcconfig"
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = i386 x86_64
