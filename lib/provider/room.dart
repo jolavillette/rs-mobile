@@ -39,22 +39,6 @@ class RoomChatLobby with ChangeNotifier {
   /// The identity used in the lobby [lobbyId], or null before it was read.
   String? roomIdentity(String lobbyId) => _roomIdentity[lobbyId];
 
-  /// The identity that wrote a room message, to draw its avatar: the one
-  /// known among the participants or the identities read so far, else a
-  /// bare one (its identicon). Null when the message names no author.
-  Identity? chatSenderIdentity(ChatMessage message) {
-    final gxsId = message.lobbyPeerGxsId;
-    if (gxsId == null || gxsId.isEmpty) return null;
-    final participants = _lobbyParticipants[message.chatId?.lobbyId?.xstr64];
-    if (participants != null) {
-      for (final identity in participants) {
-        if (identity.mId == gxsId) return identity;
-      }
-    }
-    return _allIdentity[gxsId] ??
-        Identity(mId: gxsId, signed: false, isContact: false);
-  }
-
   /// Returns a copy of the lobby participants map.
   Map<String, List<Identity>> get lobbyParticipants => {..._lobbyParticipants};
 
